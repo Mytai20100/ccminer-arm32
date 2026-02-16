@@ -33,20 +33,11 @@ jobs:
             alpine:3.19 \
             sh -c '
               apk add --no-cache build-base automake autoconf libtool \
-                curl-dev curl-static openssl-dev openssl-libs-static \
-                linux-headers git jansson-dev zlib-dev
-              
-              chmod +x autogen.sh configure install-sh config.sub config.guess || true
+                curl-dev openssl-dev linux-headers git jansson-dev
               
               sh autogen.sh
               
-              chmod +x configure install-sh
-              
-              ./configure \
-                --disable-dependency-tracking \
-                CFLAGS="-O3" \
-                LDFLAGS="-static -L/usr/lib" \
-                LIBS="-ljansson -lpthread -lcurl -lnghttp2 -lssl -lcrypto -lz"
+              ./configure CFLAGS="-O3"
               
               make -j$(nproc)
               strip ccminer
@@ -84,6 +75,6 @@ jobs:
         with:
           files: release/*
           body: |
-            Static binaries for x86_64, armv7, aarch64
+            Binaries for x86_64, armv7, aarch64
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
