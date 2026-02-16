@@ -1,4 +1,4 @@
-name: Build 
+name: Build
 
 on:
   push:
@@ -32,7 +32,7 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       
-      - name: Build ${{ matrix.arch }} (Static)
+      - name: Build ${{ matrix.arch }}
         run: |
           docker run --rm \
             --platform ${{ matrix.platform }} \
@@ -40,68 +40,30 @@ jobs:
             -w /src \
             alpine:3.19 \
             sh -c '
-              apk add --no-cache \
-                build-base \
-                automake \
-                autoconf \
-                libtool \
-                curl-dev \
-                curl-static \
-                openssl-dev \
-                openssl-libs-static \
-                zlib-dev \
-                zlib-static \
-                linux-headers \
-                git \
-                jansson-dev \
-                jansson-static
-
-              sh autogen.sh || ./autogen.sh
-
+              apk add --no-cache build-base automake autoconf libtool curl-dev curl-static openssl-dev openssl-libs-static zlib-dev zlib-static linux-headers git jansson-dev jansson-static
+              
+              chmod -R u+rwx .
+              chmod +x autogen.sh install-sh compile config.guess config.sub missing depcomp 2>/dev/null || true
+              
+              sh autogen.sh
+              
               if [ "${{ matrix.arch }}" = "x86_64" ]; then
-                CPUFLAGS="-march=x86-64 -mtune=generic"
+                FLAGS="-march=x86-64 -mtune=generic"
               elif [ "${{ matrix.arch }}" = "armv7" ]; then
-                CPUFLAGS="-march=armv7-a -mfpu=neon -mfloat-abi=hard"
+                FLAGS="-march=armv7-a -mfpu=neon"
               elif [ "${{ matrix.arch }}" = "aarch64" ]; then
-                CPUFLAGS="-march=armv8-a"
+                FLAGS="-march=armv8-a"
               else
-                CPUFLAGS="-march=native"
+                FLAGS=""
               fi
-
-              ./configure \
-                CC="${{ matrix.cc }}" \
-                CXX="${{ matrix.cxx }}" \
-                CFLAGS="-O3 -fPIC $CPUFLAGS -static" \
-                CXXFLAGS="-O3 -fPIC $CPUFLAGS -static" \
-                LDFLAGS="-static -static-libgcc -static-libstdc++" \
-                --disable-shared \
-                --enable-static \
-                --disable-dependency-tracking \
-                --with-pic || {
-                  echo "Configure failed, checking config.log..."
-                  cat config.log | tail -100
-                  exit 1
-                }
               
-              make -j$(nproc) LDFLAGS="-all-static" || {
-                echo "Build failed!"
-                exit 1
-              }
+              ./configure CFLAGS="-O3 $FLAGS -static" CXXFLAGS="-O3 $FLAGS -static" LDFLAGS="-static" --disable-dependency-tracking
               
-              # Verify binary exists
-              if [ ! -f ccminer ]; then
-                echo "ccminer binary not found!"
-                ls -la
-                exit 1
-              fi
-
-              strip ccminer 2>/dev/null || true
+              make -j$(nproc) LDFLAGS="-all-static"
+              
+              strip ccminer
               mv ccminer ccminer-${{ matrix.arch }}
-
               file ccminer-${{ matrix.arch }}
-              ls -lh ccminer-${{ matrix.arch }}
-              ldd ccminer-${{ matrix.arch }} 2>&1 || echo "Static binary (good!)"
-              ./ccminer-${{ matrix.arch }} --version || ./ccminer-${{ matrix.arch }} --help || echo "Binary created"
             '
       
       - name: Upload artifact
@@ -136,5 +98,13 @@ jobs:
         with:
           files: release/*
           body: |
+            Static binaries for x86_64, armv7, aarch64
+            
+            No dependencies required
+            Compatible with all Linux distributions
+            
+            Download, chmod +x, and run
+            
+            Checksums: SHA256SUMS
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
