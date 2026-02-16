@@ -219,3 +219,68 @@ u128_neon __verusclmulwithoutreduction64alignedrepeatv2_2_neon(
     }
     return acc;
 }
+/* Helper functions */
+u128_neon lazyLengthHash_neon(uint64_t keylength, uint64_t length) {
+    /* Create vector with keylength and length */
+    u128_neon lengthvector = vcombine_u64(
+        vcreate_u64(length),
+        vcreate_u64(keylength)
+    );
+    /* Carryless multiply lengthvector with itself */
+    uint64x2_t lv64 = vreinterpretq_u64_u8(lengthvector);
+    uint64x2_t clprod1 = clmul_neon(lv64, lv64, 0x10);
+    return vreinterpretq_u8_u64(clprod1);
+}
+
+u128_neon precompReduction64_si128_neon(u128_neon A) {
+    /* Modulo reduction to 64-bit value */
+    const u128_neon C = vreinterpretq_u8_u64(vcombine_u64(
+        vcreate_u64((1U << 4) + (1U << 3) + (1U << 1) + (1U << 0)),
+        vcreate_u64(0)
+    ));
+    
+    uint64x2_t A64 = vreinterpretq_u64_u8(A);
+    uint64x2_t C64 = vreinterpretq_u64_u8(C);
+    uint64x2_t Q2_64 = clmul_neon(A64, C64, 0x01);
+    u128_neon Q2 = vreinterpretq_u8_u64(Q2_64);
+    
+    /* Shuffle operation - table lookup manually */
+    const uint8_t shuf_tbl[16] = {
+        0, 27, 54, 45, 108, 119, 90, 65, 216, 195, 238, 245, 180, 175, 130, 153
+    };
+    
+    /* Extract high 64 bits of Q2 */
+    uint8_t Q2_high_bytes[16];
+    vst1q_u8(Q2_high_bytes, Q2);
+    
+    /* Perform shuffle manually */
+    uint8_t Q3_bytes[16];
+    for (int i = 0; i < 16; i++) {
+        uint8_t idx = Q2_high_bytes[i + 8]; /* Upper 8 bytes */
+        if (idx < 16) {
+            Q3_bytes[i] = shuf_tbl[idx];
+        } else {
+            Q3_bytes[i] = 0;
+        }
+    }
+    u128_neon Q3 = vld1q_u8(Q3_bytes);
+    
+    u128_neon Q4 = veorq_u8(Q2, A);
+    u128_neon final = veorq_u8(Q3, Q4);
+    return final;
+}
+
+uint64_t precompReduction64_neon(u128_neon A) {
+    u128_neon result = precompReduction64_si128_neon(A);
+    return vgetq_lane_u64(vreinterpretq_u64_u8(result), 0);
+}
+
+/* Generic interface wrapper */
+uint64_t verusclhashv2_2(void * random, const unsigned char buf[64], uint64_t keyMask, uint32_t *fixrand, uint32_t *fixrandex,
+	void *g_prand, void *g_prandex) {
+    u128_neon acc = __verusclmulwithoutreduction64alignedrepeatv2_2_neon(
+        (u128_neon *)random, (const u128_neon *)buf, keyMask, fixrand, fixrandex, 
+        (u128_neon *)g_prand, (u128_neon *)g_prandex);
+    acc = veorq_u8(acc, lazyLengthHash_neon(1024, 64));
+    return precompReduction64_neon(acc);
+}

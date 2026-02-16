@@ -44,7 +44,7 @@ u128_neon __verusclmulwithoutreduction64alignedrepeatv2_2_neon(
     u128_neon *randomsource, const u128_neon buf[4], uint64_t keyMask,
     uint32_t *fixrand, uint32_t *fixrandex, u128_neon *g_prand, u128_neon *g_prandex);
 
-// Wrapper matching x86 signature
-#define __verusclmulwithoutreduction64alignedrepeatv2_2 __verusclmulwithoutreduction64alignedrepeatv2_2_neon
+/* Generic interface */
+uint64_t verusclhashv2_2(void * random, const unsigned char buf[64], uint64_t keyMask, uint32_t *fixrand, uint32_t *fixrandex,
+	void *g_prand, void *g_prandex);
 
-#endif

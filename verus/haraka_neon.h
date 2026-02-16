@@ -100,13 +100,14 @@ void haraka512_neon(unsigned char *out, const unsigned char *in);
 void haraka512_4x_neon(unsigned char *out, const unsigned char *in);
 void haraka512_8x_neon(unsigned char *out, const unsigned char *in);
 
-// Wrapper functions matching x86 signatures
-#define load_constants load_constants_neon
-#define haraka256 haraka256_neon
-#define haraka256_4x haraka256_4x_neon
-#define haraka256_8x haraka256_8x_neon
-#define haraka512 haraka512_neon
-#define haraka512_4x haraka512_4x_neon
-#define haraka512_8x haraka512_8x_neon
-
-#endif
+/* Generic interface wrapper declarations */
+void load_constants();
+void haraka256(unsigned char *out, const unsigned char *in);
+void haraka256_keyed(unsigned char *out, const unsigned char *in, const u128 *rc);
+void haraka256_4x(unsigned char *out, const unsigned char *in);
+void haraka256_8x(unsigned char *out, const unsigned char *in);
+void haraka512(unsigned char *out, const unsigned char *in);
+void haraka512_zero(unsigned char *out, const unsigned char *in);
+void haraka512_keyed(unsigned char *out, const unsigned char *in, const u128 *rc);
+void haraka512_4x(unsigned char *out, const unsigned char *in);
+void haraka512_8x(unsigned char *out, const unsigned char *in);
