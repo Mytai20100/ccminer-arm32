@@ -36,12 +36,12 @@ jobs:
                 curl-dev curl-static openssl-dev openssl-libs-static \
                 linux-headers git jansson-dev zlib-dev
               
-              ./autogen.sh
+              sh autogen.sh
               
               ./configure \
                 --with-crypto \
                 --with-curl \
-                CFLAGS="-O3 -march=native" \
+                CFLAGS="-O3" \
                 LDFLAGS="-static"
               
               make -j$(nproc)
