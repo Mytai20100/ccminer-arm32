@@ -58,7 +58,11 @@ jobs:
                 FLAGS=""
               fi
               
-              ./configure CFLAGS="-O3 $FLAGS" CXXFLAGS="-O3 $FLAGS" LDFLAGS="-static" --with-curl --disable-dependency-tracking
+              ./configure \
+                CFLAGS="-O3 $FLAGS" \
+                CXXFLAGS="-O3 $FLAGS" \
+                --with-curl \
+                --disable-dependency-tracking
               
               make -j$(nproc) || exit 1
               
@@ -103,10 +107,10 @@ jobs:
         with:
           files: release/*
           body: |
-            Static binaries for x86_64, armv7, aarch64
+            Optimized ccminer binaries for x86_64, armv7, aarch64
             
-            No dependencies required
-            Compatible with all Linux distributions
+            Built with -O3 and architecture-specific optimizations
+            Requires standard Linux libraries (glibc, libcurl, openssl)
             
             Download, chmod +x, and run
             
