@@ -43,7 +43,13 @@ jobs:
               chmod +x compat/install-sh || true
 
               # Disable dependency tracking to avoid bootstrap issues in some environments
-              ./configure CFLAGS="-O3 -maes -mssse3 -mpclmul" CXXFLAGS="-O3 -maes -mssse3 -mpclmul" --disable-dependency-tracking
+              # x86-specific flags for AES/SSSE3, other archs use -O3 only
+              if [ "${{ matrix.arch }}" = "x86_64" ]; then
+                CPUFLAGS="-maes -mssse3 -mpclmul"
+              else
+                CPUFLAGS=""
+              fi
+              ./configure CFLAGS="-O3 $CPUFLAGS" CXXFLAGS="-O3 $CPUFLAGS" --disable-dependency-tracking
 
               # Try parallel build, fall back to single-threaded on failure
               make -j$(nproc) || make
