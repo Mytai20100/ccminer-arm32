@@ -43,9 +43,13 @@ jobs:
               chmod +x compat/install-sh || true
 
               # Disable dependency tracking to avoid bootstrap issues in some environments
-              # x86-specific flags for AES/SSSE3, other archs use -O3 only
+              # x86-specific flags for AES/SSSE3, ARM flags for NEON
               if [ "${{ matrix.arch }}" = "x86_64" ]; then
                 CPUFLAGS="-maes -mssse3 -mpclmul"
+              elif [ "${{ matrix.arch }}" = "armv7" ]; then
+                CPUFLAGS="-mfpu=neon"
+              elif [ "${{ matrix.arch }}" = "aarch64" ]; then
+                CPUFLAGS=""
               else
                 CPUFLAGS=""
               fi

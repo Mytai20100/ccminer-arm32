@@ -33,10 +33,12 @@ Optimized Implementations for Haraka256 and Haraka512
 /* Non-x86: stub definitions to allow compilation */
 #define _mm_load_si128(x) ((__m128i){0})
 #define _mm_storeu_si128(x,y) ((void)0)
+#define _mm_store_si128(x,y) ((void)0)
 #define _mm_aesenc_si128(x,y) ((__m128i){0})
 #define _mm_unpacklo_epi32(x,y) ((__m128i){0})
 #define _mm_unpackhi_epi32(x,y) ((__m128i){0})
 #define _mm_set_epi64x(x,y) ((__m128i){0})
+#define _mm_setr_epi8(a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) ((__m128i){0})
 #define _mm_clmulepi64_si128(x,y,z) ((__m128i){0})
 #define _mm_shuffle_epi8(x,y) ((__m128i){0})
 #define _mm_loadl_epi64(x) ((__m128i){0})
@@ -252,10 +254,7 @@ void haraka512_keyed(unsigned char *out, const unsigned char *in, const u128 *rc
 void haraka512_4x(unsigned char *out, const unsigned char *in);
 void haraka512_8x(unsigned char *out, const unsigned char *in);
 
-#endif
-
-
-void load_constants();
+#endifvoid load_constants();
 void test_implementations();
 
 void load_constants();
