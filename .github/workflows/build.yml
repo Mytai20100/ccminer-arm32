@@ -38,7 +38,7 @@ jobs:
             -w /src \
             alpine:3.19 \
             sh -c '
-              apk add --no-cache build-base automake autoconf libtool curl-dev curl-static openssl-dev openssl-libs-static zlib-dev zlib-static linux-headers git jansson-dev jansson-static
+              apk add --no-cache build-base automake autoconf libtool openssl-dev openssl-libs-static zlib-dev zlib-static linux-headers git jansson-dev jansson-static
               
               chmod -R u+rwx .
               chmod +x autogen.sh install-sh compile config.guess config.sub missing depcomp 2>/dev/null || true
@@ -55,7 +55,7 @@ jobs:
                 FLAGS=""
               fi
               
-              ./configure CFLAGS="-O3 $FLAGS" CXXFLAGS="-O3 $FLAGS" LDFLAGS="-static -static-libgcc -static-libstdc++" --with-crypto --with-curl --disable-dependency-tracking
+              ./configure CFLAGS="-O3 $FLAGS" CXXFLAGS="-O3 $FLAGS" LDFLAGS="-static -static-libgcc -static-libstdc++" --with-crypto --disable-dependency-tracking
               
               make -j$(nproc) || exit 1
               
