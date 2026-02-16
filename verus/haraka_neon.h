@@ -9,6 +9,10 @@ Auto-detects ARMv7l vs ARMv8+ at compile time
 #include <arm_neon.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define NUMROUNDS 5
 
 typedef unsigned long u64;
@@ -112,4 +116,9 @@ void haraka512_zero(unsigned char *out, const unsigned char *in);
 void haraka512_keyed(unsigned char *out, const unsigned char *in, const u128 *rc);
 void haraka512_4x(unsigned char *out, const unsigned char *in);
 void haraka512_8x(unsigned char *out, const unsigned char *in);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* HARAKA_NEON_H_ */
