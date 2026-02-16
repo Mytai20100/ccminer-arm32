@@ -1,0 +1,50 @@
+/*
+ARM NEON implementation of Verus CLHash
+*/
+
+#ifndef VERUS_CLHASH_NEON_H_
+#define VERUS_CLHASH_NEON_H_
+
+#include <arm_neon.h>
+#include <stdint.h>
+
+typedef uint8x16_t u128_neon;
+
+// Carryless multiplication using PMULL
+#ifdef __ARM_FEATURE_CRYPTO
+
+static inline uint64x2_t clmul_neon(uint64x2_t a, uint64x2_t b, int imm) {
+    poly64x2_t a_poly = vreinterpretq_p64_u64(a);
+    poly64x2_t b_poly = vreinterpretq_p64_u64(b);
+    poly64_t a_elem = vgetq_lane_p64(a_poly, (imm & 0x01) ? 1 : 0);
+    poly64_t b_elem = vgetq_lane_p64(b_poly, (imm & 0x10) ? 1 : 0);
+    poly128_t result = vmull_p64(a_elem, b_elem);
+    return vreinterpretq_u64_p128(result);
+}
+
+#else
+
+static inline uint64x2_t clmul_neon(uint64x2_t a, uint64x2_t b, int imm) {
+    uint64_t a_val = (imm & 0x01) ? vgetq_lane_u64(a, 1) : vgetq_lane_u64(a, 0);
+    uint64_t b_val = (imm & 0x10) ? vgetq_lane_u64(b, 1) : vgetq_lane_u64(b, 0);
+    uint64_t result = 0;
+    uint64_t temp_b = b_val;
+    for (int i = 0; i < 64; i++) {
+        if (a_val & (1ULL << i)) result ^= temp_b;
+        temp_b <<= 1;
+    }
+    return vcombine_u64(vcreate_u64(result), vcreate_u64(0));
+}
+
+#endif
+
+extern int __cpuverusoptimized;
+
+u128_neon __verusclmulwithoutreduction64alignedrepeatv2_2_neon(
+    u128_neon *randomsource, const u128_neon buf[4], uint64_t keyMask,
+    uint32_t *fixrand, uint32_t *fixrandex, u128_neon *g_prand, u128_neon *g_prandex);
+
+// Wrapper matching x86 signature
+#define __verusclmulwithoutreduction64alignedrepeatv2_2 __verusclmulwithoutreduction64alignedrepeatv2_2_neon
+
+#endif

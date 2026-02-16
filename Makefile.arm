@@ -1,0 +1,131 @@
+# Makefile for ccminer with ARM NEON support
+# Supports x86, x64, ARMv7l (32-bit), ARMv9 (32-bit) architectures
+
+CC = gcc
+CXX = g++
+AR = ar
+
+# Detect architecture
+ARCH := $(shell uname -m)
+DETECTED_ARCH := unknown
+
+ifeq ($(ARCH),x86_64)
+    DETECTED_ARCH := x64
+else ifeq ($(ARCH),i686)
+    DETECTED_ARCH := x86
+else ifeq ($(ARCH),i386)
+    DETECTED_ARCH := x86
+else ifeq ($(ARCH),armv7l)
+    DETECTED_ARCH := armv7l
+else ifeq ($(ARCH),aarch64)
+    # Check if we want 32-bit build on 64-bit ARM
+    ifneq ($(ARM_32BIT),)
+        DETECTED_ARCH := armv9
+    else
+        DETECTED_ARCH := aarch64
+    endif
+else ifeq ($(ARCH),arm)
+    DETECTED_ARCH := armv7l
+endif
+
+# Allow override
+TARGET_ARCH ?= $(DETECTED_ARCH)
+
+# Base flags
+CFLAGS = -Wall -O3 -fomit-frame-pointer -fno-strict-aliasing
+CXXFLAGS = $(CFLAGS) -std=c++11
+LDFLAGS = -lpthread -lcurl -lssl -lcrypto
+
+# Architecture-specific flags and sources
+ifeq ($(TARGET_ARCH),x64)
+    CFLAGS += -m64 -march=native -maes -mpclmul -msse4.1 -mavx2
+    VERUS_SOURCES = verus/haraka.c verus/verus_clhash.cpp
+    VERUS_HEADERS = verus/haraka.h verus/verus_clhash.h
+else ifeq ($(TARGET_ARCH),x86)
+    CFLAGS += -m32 -march=native -maes -mpclmul -msse4.1
+    VERUS_SOURCES = verus/haraka.c verus/verus_clhash.cpp
+    VERUS_HEADERS = verus/haraka.h verus/verus_clhash.h
+else ifeq ($(TARGET_ARCH),armv7l)
+    CFLAGS += -march=armv7-a -mfpu=neon -mfloat-abi=hard
+    # Check for Crypto Extensions
+    CRYPTO_CHECK := $(shell $(CC) -march=armv7-a+crypto -E - </dev/null >/dev/null 2>&1 && echo yes)
+    ifeq ($(CRYPTO_CHECK),yes)
+        CFLAGS += -march=armv7-a+crypto
+    endif
+    VERUS_SOURCES = verus/armv7l/haraka_neon_armv7l.c verus/armv7l/verus_clhash_neon_armv7l.cpp
+    VERUS_HEADERS = verus/armv7l/haraka_neon_armv7l.h verus/armv7l/verus_clhash_neon_armv7l.h
+else ifeq ($(TARGET_ARCH),armv9)
+    CFLAGS += -march=armv8-a -mfpu=neon-fp-armv8 -mfloat-abi=hard
+    CFLAGS += -march=armv8-a+crypto
+    VERUS_SOURCES = verus/armv9/haraka_neon_armv9.c verus/armv9/verus_clhash_neon_armv9.cpp
+    VERUS_HEADERS = verus/armv9/haraka_neon_armv9.h verus/armv9/verus_clhash_neon_armv9.h
+else ifeq ($(TARGET_ARCH),aarch64)
+    CFLAGS += -march=armv8-a+crypto
+    VERUS_SOURCES = verus/armv9/haraka_neon_armv9.c verus/armv9/verus_clhash_neon_armv9.cpp
+    VERUS_HEADERS = verus/armv9/haraka_neon_armv9.h verus/armv9/verus_clhash_neon_armv9.h
+else
+    $(error Unsupported architecture: $(TARGET_ARCH))
+endif
+
+# Common sources
+COMMON_SOURCES = ccminer.cpp pools.cpp util.cpp bench.cpp api.cpp hashlog.cpp \
+                 stats.cpp sysinfos.cpp crc32.c bignum.cpp \
+                 equi/equi-stratum.cpp verus/verusscan.cpp
+
+COMPAT_SOURCES = compat/jansson/dump.c compat/jansson/error.c compat/jansson/hashtable.c \
+                 compat/jansson/hashtable_seed.c compat/jansson/load.c compat/jansson/memory.c \
+                 compat/jansson/pack_unpack.c compat/jansson/strbuffer.c compat/jansson/strconv.c \
+                 compat/jansson/utf.c compat/jansson/value.c
+
+ALL_SOURCES = $(COMMON_SOURCES) $(VERUS_SOURCES) $(COMPAT_SOURCES)
+OBJECTS = $(ALL_SOURCES:.cpp=.o)
+OBJECTS := $(OBJECTS:.c=.o)
+
+TARGET = ccminer-$(TARGET_ARCH)
+
+.PHONY: all clean info
+
+all: info $(TARGET)
+
+info:
+	@echo "========================================"
+	@echo "Building ccminer for: $(TARGET_ARCH)"
+	@echo "Detected architecture: $(DETECTED_ARCH)"
+	@echo "Compiler flags: $(CFLAGS)"
+	@echo "========================================"
+
+$(TARGET): $(OBJECTS)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
+	@echo "Build complete: $@"
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+clean:
+	rm -f $(OBJECTS) ccminer-* *.o verus/*.o verus/armv7l/*.o verus/armv9/*.o
+
+# Architecture-specific targets
+.PHONY: x64 x86 armv7l armv9 aarch64
+
+x64:
+	$(MAKE) TARGET_ARCH=x64
+
+x86:
+	$(MAKE) TARGET_ARCH=x86
+
+armv7l:
+	$(MAKE) TARGET_ARCH=armv7l
+
+armv9:
+	$(MAKE) TARGET_ARCH=armv9
+
+aarch64:
+	$(MAKE) TARGET_ARCH=aarch64
+
+# Build all architectures
+.PHONY: all-arch
+
+all-arch: x64 x86 armv7l armv9
