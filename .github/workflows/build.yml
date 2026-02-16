@@ -30,14 +30,9 @@ jobs:
             alpine:3.19 \
             sh -c '
               apk add --no-cache build-base automake autoconf libtool \
-                curl-dev curl-static openssl-dev openssl-libs-static \
-                linux-headers git jansson-dev zlib-dev zlib-static \
-                nghttp2-static c-ares-static brotli-static libpsl-static \
-                libidn2-static libunistring-static
+                curl-dev openssl-dev linux-headers git jansson-dev
               
               sh autogen.sh
-              
-              chmod +x install-sh config.sub config.guess compat/install-sh 2>/dev/null || true
               
               if [ "${{ matrix.arch }}" = "x86_64" ]; then
                 CPUFLAGS="-maes -mssse3 -mpclmul"
@@ -47,12 +42,7 @@ jobs:
                 CPUFLAGS=""
               fi
               
-              ./configure \
-                CFLAGS="-O3 $CPUFLAGS" \
-                CXXFLAGS="-O3 $CPUFLAGS" \
-                LDFLAGS="-static -static-libgcc -static-libstdc++" \
-                LIBS="-lcurl -lnghttp2 -lidn2 -lssh2 -lpsl -lssl -lcrypto -lcares -lbrotlidec -lbrotlicommon -lz -lunistring -lpthread" \
-                --disable-dependency-tracking
+              ./configure CFLAGS="-O3 $CPUFLAGS" CXXFLAGS="-O3 $CPUFLAGS" --disable-dependency-tracking
               
               make -j$(nproc)
               
@@ -86,6 +76,7 @@ jobs:
         with:
           files: release/*
           body: |
-            Static binaries for x86_64, armv7, aarch64
+            Dynamic binaries for x86_64, armv7, aarch64
+            Requires musl libc runtime (provided by Alpine Linux)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
