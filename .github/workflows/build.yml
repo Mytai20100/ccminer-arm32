@@ -36,13 +36,17 @@ jobs:
                 curl-dev curl-static openssl-dev openssl-libs-static \
                 linux-headers git jansson-dev zlib-dev
               
+              chmod +x autogen.sh configure install-sh config.sub config.guess || true
+              
               sh autogen.sh
               
+              chmod +x configure install-sh
+              
               ./configure \
-                --with-crypto \
-                --with-curl \
+                --disable-dependency-tracking \
                 CFLAGS="-O3" \
-                LDFLAGS="-static"
+                LDFLAGS="-static -L/usr/lib" \
+                LIBS="-ljansson -lpthread -lcurl -lnghttp2 -lssl -lcrypto -lz"
               
               make -j$(nproc)
               strip ccminer
