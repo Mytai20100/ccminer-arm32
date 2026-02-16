@@ -35,6 +35,8 @@ jobs:
               
               sh autogen.sh
               
+              chmod +x install-sh config.sub config.guess compat/install-sh 2>/dev/null || true
+              
               if [ "${{ matrix.arch }}" = "x86_64" ]; then
                 CPUFLAGS="-maes -mssse3 -mpclmul"
               elif [ "${{ matrix.arch }}" = "armv7" ]; then
