@@ -9,6 +9,7 @@ ARM NEON implementation of Verus CLHash
 #include <stdint.h>
 
 typedef uint8x16_t u128_neon;
+typedef u128_neon u128;
 
 // Carryless multiplication using PMULL
 #ifdef __ARM_FEATURE_CRYPTO
@@ -48,3 +49,4 @@ u128_neon __verusclmulwithoutreduction64alignedrepeatv2_2_neon(
 uint64_t verusclhashv2_2(void * random, const unsigned char buf[64], uint64_t keyMask, uint32_t *fixrand, uint32_t *fixrandex,
 	void *g_prand, void *g_prandex);
 
+#endif /* VERUS_CLHASH_NEON_H_ */

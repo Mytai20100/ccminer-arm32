@@ -222,13 +222,12 @@ u128_neon __verusclmulwithoutreduction64alignedrepeatv2_2_neon(
 /* Helper functions */
 u128_neon lazyLengthHash_neon(uint64_t keylength, uint64_t length) {
     /* Create vector with keylength and length */
-    u128_neon lengthvector = vcombine_u64(
+    uint64x2_t lengthvector = vcombine_u64(
         vcreate_u64(length),
         vcreate_u64(keylength)
     );
     /* Carryless multiply lengthvector with itself */
-    uint64x2_t lv64 = vreinterpretq_u64_u8(lengthvector);
-    uint64x2_t clprod1 = clmul_neon(lv64, lv64, 0x10);
+    uint64x2_t clprod1 = clmul_neon(lengthvector, lengthvector, 0x10);
     return vreinterpretq_u8_u64(clprod1);
 }
 
