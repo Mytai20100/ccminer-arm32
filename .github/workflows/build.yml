@@ -1,11 +1,9 @@
 name: Build
-
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -59,7 +57,7 @@ jobs:
               
               ./configure CFLAGS="-O3 $FLAGS" CXXFLAGS="-O3 $FLAGS" LDFLAGS="-static -static-libgcc -static-libstdc++" --with-crypto --with-curl --disable-dependency-tracking
               
-              make -j$(nproc) LDFLAGS="-all-static" || exit 1
+              make -j$(nproc) || exit 1
               
               if [ ! -f ccminer ]; then
                 echo "Build failed - binary not found"
@@ -77,7 +75,6 @@ jobs:
           name: ccminer-${{ matrix.arch }}
           path: ccminer-${{ matrix.arch }}
           if-no-files-found: error
-
   release:
     needs: build
     runs-on: ubuntu-latest
