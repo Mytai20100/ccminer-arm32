@@ -23,11 +23,13 @@
 
 //#include <intrin.h>
 
+#if defined(__x86_64__) || defined(__i386__)
 #ifndef _WIN32
 #include <cpuid.h>
 #else
 #include <intrin.h>
 #endif // !WIN32
+#endif // __x86_64__ || __i386__
 
 
 #include <stdlib.h>
@@ -66,8 +68,18 @@ extern int __cpuverusoptimized;
 inline bool IsCPUVerusOptimized()
 {
 
+#if defined(__x86_64__) || defined(__i386__)
 #ifndef _WIN32
 	unsigned int eax, ebx, ecx, edx;
+	#ifndef bit_AVX
+	#define bit_AVX		(1 << 28)
+	#endif
+	#ifndef bit_AES
+	#define bit_AES		(1 << 25)
+	#endif
+	#ifndef bit_PCLMUL
+	#define bit_PCLMUL  (1 << 1)
+	#endif
 
 	if (!__get_cpuid(1, &eax, &ebx, &ecx, &edx))
 	{
@@ -87,8 +99,13 @@ inline bool IsCPUVerusOptimized()
 	return ((cpuInfo[2] & (bit_AVX | bit_AES)) == (bit_AVX | bit_AES));
 
 #endif
+#else
+	// On non-x86 architectures, return false (Verus optimizations not available)
+	return false;
+#endif
 
 
+#if defined(__x86_64__) || defined(__i386__)
     if (__cpuverusoptimized & 0x80)
     {
 #ifdef _WIN32
@@ -115,6 +132,11 @@ inline bool IsCPUVerusOptimized()
 #endif //WIN32
     }
     return __cpuverusoptimized;
+#else
+    // Non-x86: Verus optimizations not supported
+    __cpuverusoptimized = false;
+    return false;
+#endif
 
 };
 
