@@ -1,9 +1,11 @@
-name: Build
+name: Build 
+
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -12,16 +14,25 @@ jobs:
         include:
           - arch: x86_64
             platform: linux/amd64
+            cc: gcc
+            cxx: g++
           - arch: armv7
             platform: linux/arm/v7
+            cc: gcc
+            cxx: g++
           - arch: aarch64
             platform: linux/arm64
+            cc: gcc
+            cxx: g++
+    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-      - name: Build ${{ matrix.arch }}
+      
+      - name: Build ${{ matrix.arch }} (Static)
         run: |
           docker run --rm \
             --platform ${{ matrix.platform }} \
@@ -29,54 +40,101 @@ jobs:
             -w /src \
             alpine:3.19 \
             sh -c '
-              apk add --no-cache build-base automake autoconf libtool \
-                curl-dev openssl-dev linux-headers git jansson-dev
-              
-              sh autogen.sh
-              
+              apk add --no-cache \
+                build-base \
+                automake \
+                autoconf \
+                libtool \
+                curl-dev \
+                curl-static \
+                openssl-dev \
+                openssl-libs-static \
+                zlib-dev \
+                zlib-static \
+                linux-headers \
+                git \
+                jansson-dev \
+                jansson-static
+
+              sh autogen.sh || ./autogen.sh
+
               if [ "${{ matrix.arch }}" = "x86_64" ]; then
-                CPUFLAGS="-maes -mssse3 -mpclmul"
+                CPUFLAGS="-march=x86-64 -mtune=generic"
               elif [ "${{ matrix.arch }}" = "armv7" ]; then
-                CPUFLAGS="-mfpu=neon"
+                CPUFLAGS="-march=armv7-a -mfpu=neon -mfloat-abi=hard"
+              elif [ "${{ matrix.arch }}" = "aarch64" ]; then
+                CPUFLAGS="-march=armv8-a"
               else
-                CPUFLAGS=""
+                CPUFLAGS="-march=native"
               fi
+
+              ./configure \
+                CC="${{ matrix.cc }}" \
+                CXX="${{ matrix.cxx }}" \
+                CFLAGS="-O3 -fPIC $CPUFLAGS -static" \
+                CXXFLAGS="-O3 -fPIC $CPUFLAGS -static" \
+                LDFLAGS="-static -static-libgcc -static-libstdc++" \
+                --disable-shared \
+                --enable-static \
+                --disable-dependency-tracking \
+                --with-pic || {
+                  echo "Configure failed, checking config.log..."
+                  cat config.log | tail -100
+                  exit 1
+                }
               
-              ./configure CFLAGS="-O3 $CPUFLAGS" CXXFLAGS="-O3 $CPUFLAGS" --disable-dependency-tracking
+              make -j$(nproc) LDFLAGS="-all-static" || {
+                echo "Build failed!"
+                exit 1
+              }
               
-              make -j$(nproc)
-              
-              strip ccminer
+              # Verify binary exists
+              if [ ! -f ccminer ]; then
+                echo "ccminer binary not found!"
+                ls -la
+                exit 1
+              fi
+
+              strip ccminer 2>/dev/null || true
               mv ccminer ccminer-${{ matrix.arch }}
+
               file ccminer-${{ matrix.arch }}
               ls -lh ccminer-${{ matrix.arch }}
+              ldd ccminer-${{ matrix.arch }} 2>&1 || echo "Static binary (good!)"
+              ./ccminer-${{ matrix.arch }} --version || ./ccminer-${{ matrix.arch }} --help || echo "Binary created"
             '
+      
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ccminer-${{ matrix.arch }}
           path: ccminer-${{ matrix.arch }}
+          if-no-files-found: error
+
   release:
     needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
+    
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
+      
       - name: Prepare release
         run: |
           mkdir -p release
-          find artifacts -name "ccminer-*" -exec mv {} release/ \;
+          find artifacts -name "ccminer-*" -exec cp {} release/ \;
           cd release
+          chmod +x ccminer-*
           sha256sum ccminer-* > SHA256SUMS
+          ls -lh
+      
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: release/*
           body: |
-            Dynamic binaries for x86_64, armv7, aarch64
-            Requires musl libc runtime (provided by Alpine Linux)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
