@@ -48,20 +48,25 @@ jobs:
               sh autogen.sh
               
               if [ "${{ matrix.arch }}" = "x86_64" ]; then
-                FLAGS="-march=x86-64 -mtune=generic"
+                FLAGS="-maes -msse3 -mssse3 -mpclmul"
               elif [ "${{ matrix.arch }}" = "armv7" ]; then
-                FLAGS="-march=armv7-a -mfpu=neon"
+                FLAGS="-mfpu=neon"
               elif [ "${{ matrix.arch }}" = "aarch64" ]; then
-                FLAGS="-march=armv8-a"
+                FLAGS=""
               else
                 FLAGS=""
               fi
               
-              ./configure CFLAGS="-O3 $FLAGS -static" CXXFLAGS="-O3 $FLAGS -static" LDFLAGS="-static" --disable-dependency-tracking
+              ./configure CFLAGS="-O3 $FLAGS" CXXFLAGS="-O3 $FLAGS" LDFLAGS="-static -static-libgcc -static-libstdc++" --with-crypto --with-curl --disable-dependency-tracking
               
-              make -j$(nproc) LDFLAGS="-all-static"
+              make -j$(nproc) LDFLAGS="-all-static" || exit 1
               
-              strip ccminer
+              if [ ! -f ccminer ]; then
+                echo "Build failed - binary not found"
+                exit 1
+              fi
+              
+              strip ccminer 2>/dev/null || true
               mv ccminer ccminer-${{ matrix.arch }}
               file ccminer-${{ matrix.arch }}
             '
