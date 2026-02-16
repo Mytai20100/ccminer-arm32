@@ -1,4 +1,4 @@
-name: Build Multi-Architecture
+name: Build 
 
 on:
   push:
@@ -15,15 +15,12 @@ jobs:
           - arch: x86_64
             docker_platform: linux/amd64
             docker_image: alpine:3.19
-            triplet: x86_64-linux-musl
           - arch: armv7
             docker_platform: linux/arm/v7
             docker_image: alpine:3.19
-            triplet: armv7-linux-musleabihf
           - arch: aarch64
             docker_platform: linux/arm64
             docker_image: alpine:3.19
-            triplet: aarch64-linux-musl
     
     steps:
       - name: Checkout
@@ -46,12 +43,12 @@ jobs:
                 curl-dev curl-static openssl-dev openssl-libs-static \
                 linux-headers git
               
-              ./autogen.sh
+              sh autogen.sh
               
               CFLAGS="-O3 -fPIC" \
               CXXFLAGS="-O3 -fPIC" \
               LDFLAGS="-static" \
-              ./configure --with-curl
+              sh configure --with-curl
               
               make -j$(nproc)
               
@@ -93,24 +90,12 @@ jobs:
         with:
           files: release/*
           body: |
-            ## CCMiner Multi-Architecture Static Binaries
+        
             
-            ### Architectures
             - **x86_64** - Intel/AMD 64-bit
             - **armv7** - ARM 32-bit (NEON)
             - **aarch64** - ARM 64-bit (NEON + Crypto)
             
-            ### Usage
-            ```bash
-            chmod +x ccminer-<arch>
-            ./ccminer-<arch> -a verus -o stratum+tcp://pool:port -u address -p x
-            ```
-            
-            ### Verify
-            ```bash
-            sha256sum -c SHA256SUMS
-            ```
-            
-            All binaries are statically linked and have no dependencies.
+          
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
