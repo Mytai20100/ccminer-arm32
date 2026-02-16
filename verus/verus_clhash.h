@@ -20,6 +20,11 @@
 #ifndef INCLUDE_VERUS_CLHASH_H
 #define INCLUDE_VERUS_CLHASH_H
 
+// For ARM NEON builds, use the NEON-specific implementation
+#if defined(__ARM_NEON) || defined(__aarch64__) || defined(__arm__)
+#include "verus_clhash_neon.h"
+#include "haraka_neon.h"
+#else
 
 //#include <intrin.h>
 
@@ -166,5 +171,7 @@ void *alloc_aligned_buffer(uint64_t bufSize);
 // special high speed hasher for VerusHash 2.0
 
 #endif // #ifdef __cplusplus
+
+#endif // x86 specific code
 
 #endif // INCLUDE_VERUS_CLHASH_H
