@@ -13,14 +13,11 @@ jobs:
       matrix:
         include:
           - arch: x86_64
-            docker_platform: linux/amd64
-            docker_image: alpine:3.19
+            platform: linux/amd64
           - arch: armv7
-            docker_platform: linux/arm/v7
-            docker_image: alpine:3.19
+            platform: linux/arm/v7
           - arch: aarch64
-            docker_platform: linux/arm64
-            docker_image: alpine:3.19
+            platform: linux/arm64
     
     steps:
       - name: Checkout
@@ -28,33 +25,30 @@ jobs:
       
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-        with:
-          platforms: all
       
       - name: Build ${{ matrix.arch }}
         run: |
           docker run --rm \
-            --platform ${{ matrix.docker_platform }} \
+            --platform ${{ matrix.platform }} \
             -v $PWD:/src \
             -w /src \
-            ${{ matrix.docker_image }} \
+            alpine:3.19 \
             sh -c '
               apk add --no-cache build-base automake autoconf libtool \
                 curl-dev curl-static openssl-dev openssl-libs-static \
-                linux-headers git
+                linux-headers git pkgconfig
               
               sh autogen.sh
               
-              CFLAGS="-O3 -fPIC" \
-              CXXFLAGS="-O3 -fPIC" \
-              LDFLAGS="-static" \
-              sh configure --with-curl
+              ./configure \
+                CFLAGS="-O3 -fPIC" \
+                CXXFLAGS="-O3 -fPIC" \
+                LDFLAGS="-static" \
+                LIBS="-lcurl -lssl -lcrypto -lz"
               
               make -j$(nproc)
-              
               strip ccminer
               mv ccminer ccminer-${{ matrix.arch }}
-              
               file ccminer-${{ matrix.arch }}
               ls -lh ccminer-${{ matrix.arch }}
             '
@@ -64,7 +58,6 @@ jobs:
         with:
           name: ccminer-${{ matrix.arch }}
           path: ccminer-${{ matrix.arch }}
-          retention-days: 1
   
   release:
     needs: build
@@ -77,25 +70,19 @@ jobs:
         with:
           path: artifacts
       
-      - name: Prepare release files
+      - name: Prepare release
         run: |
           mkdir -p release
           find artifacts -name "ccminer-*" -exec mv {} release/ \;
           cd release
           sha256sum ccminer-* > SHA256SUMS
-          cat SHA256SUMS
       
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: release/*
           body: |
-        
+            Static binaries for x86_64, armv7, aarch64
             
-            - **x86_64** - Intel/AMD 64-bit
-            - **armv7** - ARM 32-bit (NEON)
-            - **aarch64** - ARM 64-bit (NEON + Crypto)
-            
-          
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
