@@ -6,8 +6,6 @@
 #ifndef BITCOIN_SERIALIZE_H
 #define BITCOIN_SERIALIZE_H
 
-//#include "compat/endian.h"
-
 #include <algorithm>
 #include <assert.h>
 #include <ios>
@@ -37,6 +35,11 @@
 #define htole64(x) OSSwapHostToLittleInt64(x)
 #define be64toh(x) OSSwapBigToHostInt64(x)
 #define le64toh(x) OSSwapLittleToHostInt64(x)
+#elif defined(__linux__)
+#include <endian.h>
+#else
+/* Fallback for systems without endian.h */
+#include <sys/endian.h>
 #endif
 
 class CScript;
