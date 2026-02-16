@@ -252,14 +252,12 @@ u128_neon precompReduction64_si128_neon(u128_neon A) {
     uint8_t Q2_high_bytes[16];
     vst1q_u8(Q2_high_bytes, Q2);
     
-    /* Perform shuffle manually */
-    uint8_t Q3_bytes[16];
-    for (int i = 0; i < 16; i++) {
-        uint8_t idx = Q2_high_bytes[i + 8]; /* Upper 8 bytes */
+    /* Perform shuffle manually on upper 8 bytes */
+    uint8_t Q3_bytes[16] = {0};
+    for (int i = 0; i < 8; i++) {
+        uint8_t idx = Q2_high_bytes[i + 8]; /* Upper 8 bytes only */
         if (idx < 16) {
             Q3_bytes[i] = shuf_tbl[idx];
-        } else {
-            Q3_bytes[i] = 0;
         }
     }
     u128_neon Q3 = vld1q_u8(Q3_bytes);

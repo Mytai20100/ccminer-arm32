@@ -12,6 +12,11 @@
 #define VERUS_KEY_SIZE128 552
 #include <stdexcept>
 #include <vector>
+
+#if defined(__ARM_NEON) || defined(__aarch64__) || defined(__arm__)
+#include <arm_neon.h>
+#endif
+
 #include "verus_clhash.h"
 #include "uint256.h"
 //#include "hash.h"
@@ -134,6 +139,30 @@ extern "C" void inline Verus2hash(unsigned char *hash, unsigned char *curBuf, un
 	u128 *g_prandex, int version)
 {
 	//uint64_t mask = VERUS_KEY_SIZE128; //552
+#if defined(__ARM_NEON) || defined(__aarch64__) || defined(__arm__)
+	// ARM NEON implementation
+	static const uint8_t shuf1_data[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0};
+	static const uint8x16_t shuf1 = vld1q_u8(shuf1_data);
+	uint8x16_t curBuf_vec = vld1q_u8(curBuf);
+	const uint8x16_t fill1 = vqtbl1q_u8(curBuf_vec, shuf1);
+	static const uint8_t shuf2_data[16] = {1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7, 0};
+	static const uint8x16_t shuf2 = vld1q_u8(shuf2_data);
+	unsigned char ch = curBuf[0];
+	vst1q_u8(&curBuf[32 + 16], fill1);
+	curBuf[32 + 15] = ch;
+	//	FillExtra((u128 *)curBuf);
+	uint64_t intermediate;
+	memcpy(curBuf + 32, nonce, 15);  //copy the 15bytes nonce
+
+	intermediate = verusclhashv2_2(data_key, curBuf, 511, fixrand, fixrandex, g_prand, g_prandex);
+		//FillExtra
+	uint8_t intermediate_bytes[16] = {0};
+	memcpy(intermediate_bytes, &intermediate, 8);
+	uint8x16_t intermediate_vec = vld1q_u8(intermediate_bytes);
+	uint8x16_t fill2 = vqtbl1q_u8(intermediate_vec, shuf2);
+	vst1q_u8(&curBuf[32 + 16], fill2);
+#else
+	// x86 SSE implementation
 	static const __m128i shuf1 = _mm_setr_epi8(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0);
 	const __m128i fill1 = _mm_shuffle_epi8(_mm_load_si128((u128 *)curBuf), shuf1);
 	static const __m128i shuf2 = _mm_setr_epi8(1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7, 0);
@@ -148,6 +177,7 @@ extern "C" void inline Verus2hash(unsigned char *hash, unsigned char *curBuf, un
 		//FillExtra
 	__m128i fill2 = _mm_shuffle_epi8(_mm_loadl_epi64((u128 *)&intermediate), shuf2);
 	_mm_store_si128((u128 *)(&curBuf[32 + 16]), fill2);
+#endif
 	curBuf[32 + 15] = *((unsigned char *)&intermediate);
 	intermediate &= 511;
 	haraka512_keyed(hash, curBuf, data_key + intermediate);
