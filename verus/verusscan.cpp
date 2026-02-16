@@ -142,11 +142,25 @@ extern "C" void inline Verus2hash(unsigned char *hash, unsigned char *curBuf, un
 #if defined(__ARM_NEON) || defined(__aarch64__) || defined(__arm__)
 	// ARM NEON implementation
 	static const uint8_t shuf1_data[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0};
-	static const uint8x16_t shuf1 = vld1q_u8(shuf1_data);
 	uint8x16_t curBuf_vec = vld1q_u8(curBuf);
-	const uint8x16_t fill1 = vqtbl1q_u8(curBuf_vec, shuf1);
+	
+	// Manual shuffle for ARMv7 compatibility
+	uint8x16_t fill1;
+#ifdef __aarch64__
+	uint8x16_t shuf1 = vld1q_u8(shuf1_data);
+	fill1 = vqtbl1q_u8(curBuf_vec, shuf1);
+#else
+	// ARMv7: manual shuffle
+	uint8_t temp[16];
+	vst1q_u8(temp, curBuf_vec);
+	uint8_t result[16];
+	for(int i = 0; i < 16; i++) {
+		result[i] = temp[shuf1_data[i]];
+	}
+	fill1 = vld1q_u8(result);
+#endif
+	
 	static const uint8_t shuf2_data[16] = {1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7, 0};
-	static const uint8x16_t shuf2 = vld1q_u8(shuf2_data);
 	unsigned char ch = curBuf[0];
 	vst1q_u8(&curBuf[32 + 16], fill1);
 	curBuf[32 + 15] = ch;
@@ -158,8 +172,20 @@ extern "C" void inline Verus2hash(unsigned char *hash, unsigned char *curBuf, un
 		//FillExtra
 	uint8_t intermediate_bytes[16] = {0};
 	memcpy(intermediate_bytes, &intermediate, 8);
+	
+	uint8x16_t fill2;
+#ifdef __aarch64__
+	uint8x16_t shuf2 = vld1q_u8(shuf2_data);
 	uint8x16_t intermediate_vec = vld1q_u8(intermediate_bytes);
-	uint8x16_t fill2 = vqtbl1q_u8(intermediate_vec, shuf2);
+	fill2 = vqtbl1q_u8(intermediate_vec, shuf2);
+#else
+	// ARMv7: manual shuffle
+	uint8_t result2[16];
+	for(int i = 0; i < 16; i++) {
+		result2[i] = intermediate_bytes[shuf2_data[i]];
+	}
+	fill2 = vld1q_u8(result2);
+#endif
 	vst1q_u8(&curBuf[32 + 16], fill2);
 #else
 	// x86 SSE implementation
