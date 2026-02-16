@@ -1,9 +1,10 @@
-name: Build 
+name: Build
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -16,14 +17,14 @@ jobs:
             platform: linux/arm/v7
           - arch: aarch64
             platform: linux/arm64
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-      
+
       - name: Build ${{ matrix.arch }}
         run: |
           docker run --rm \
@@ -32,44 +33,57 @@ jobs:
             -w /src \
             alpine:3.19 \
             sh -c '
-              apk add --no-cache build-base automake autoconf libtool \
+              apk add --no-cache build-base automake autoconf libtool m4 gawk \
                 curl-dev openssl-dev linux-headers git jansson-dev
-              
+
               sh autogen.sh
-              
-              ./configure CFLAGS="-O3"
-              
-              make -j$(nproc)
-              strip ccminer
-              mv ccminer ccminer-${{ matrix.arch }}
-              file ccminer-${{ matrix.arch }}
-              ls -lh ccminer-${{ matrix.arch }}
+
+              # Ensure install helper scripts are executable when mounted into the container
+              chmod +x install-sh || true
+              chmod +x compat/install-sh || true
+
+              # Disable dependency tracking to avoid bootstrap issues in some environments
+              ./configure CFLAGS="-O3" --disable-dependency-tracking
+
+              # Try parallel build, fall back to single-threaded on failure
+              make -j$(nproc) || make
+
+              # Only strip/move the binary if it was produced
+              if [ -f ccminer ]; then
+                strip ccminer || true
+                mv ccminer ccminer-${{ matrix.arch }}
+                file ccminer-${{ matrix.arch }}
+                ls -lh ccminer-${{ matrix.arch }}
+              else
+                echo "Build failed: ccminer not produced"
+                exit 1
+              fi
             '
-      
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ccminer-${{ matrix.arch }}
           path: ccminer-${{ matrix.arch }}
-  
+
   release:
     needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
-    
+
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-      
+
       - name: Prepare release
         run: |
           mkdir -p release
           find artifacts -name "ccminer-*" -exec mv {} release/ \;
           cd release
           sha256sum ccminer-* > SHA256SUMS
-      
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
