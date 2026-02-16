@@ -27,7 +27,21 @@ Optimized Implementations for Haraka256 and Haraka512
 #ifndef HARAKA_H_
 #define HARAKA_H_
 
+#if defined(__x86_64__) || defined(__i386__)
 #include "immintrin.h"
+#else
+/* Non-x86: stub definitions to allow compilation */
+#define _mm_load_si128(x) ((__m128i){0})
+#define _mm_storeu_si128(x,y) ((void)0)
+#define _mm_aesenc_si128(x,y) ((__m128i){0})
+#define _mm_unpacklo_epi32(x,y) ((__m128i){0})
+#define _mm_unpackhi_epi32(x,y) ((__m128i){0})
+#define _mm_set_epi64x(x,y) ((__m128i){0})
+#define _mm_clmulepi64_si128(x,y,z) ((__m128i){0})
+#define _mm_shuffle_epi8(x,y) ((__m128i){0})
+#define _mm_loadl_epi64(x) ((__m128i){0})
+typedef long long __m128i __attribute__((__vector_size__(16)));
+#endif
 
 #define NUMROUNDS 5
 
@@ -130,10 +144,6 @@ SOFTWARE.
 
 Optimized Implementations for Haraka256 and Haraka512
 */
-#ifdef HARAKA_H_
-
-
-#include "immintrin.h"
 
 #define NUMROUNDS 5
 

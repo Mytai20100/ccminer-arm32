@@ -30,12 +30,14 @@
 #include <sys/types.h>
 #endif// APPLE
 
+#if defined(__x86_64__) || defined(__i386__)
 #ifdef _WIN32
 #pragma warning (disable : 4146)
 #include <intrin.h>
 #else
 #include <x86intrin.h>
 #endif //WIN32
+#endif // __x86_64__ || __i386__
 
 void clmul64(uint64_t a, uint64_t b, uint64_t* r)
 {

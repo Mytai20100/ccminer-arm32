@@ -1,7 +1,12 @@
 #ifndef SPX_HARAKA_H
 #define SPX_HARAKA_H
 
+#if defined(__x86_64__) || defined(__i386__)
 #include "immintrin.h"
+#else
+/* Non-x86: stub definitions */
+typedef long long __m128i __attribute__((__vector_size__(16)));
+#endif
 
 #define NUMROUNDS 5
 
