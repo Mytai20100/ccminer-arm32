@@ -25,18 +25,10 @@ u128_neon __verusclmulwithoutreduction64alignedrepeatv2_2_neon(
     u128_neon *randomsource, const u128_neon buf[4], uint64_t keyMask,
     uint32_t *fixrand, uint32_t *fixrandex, u128_neon *g_prand, u128_neon *g_prandex)
 {
-    /* Load via uint8_t* to emit VLD1.8 (no alignment requirement).
-     * Direct buf[n] dereference through uint8x16_t* can generate an aligned
-     * load instruction which faults on Cortex-A7 if the pointer is not
-     * 16-byte aligned. */
-    const u128_neon b0 = vld1q_u8((const uint8_t *)buf);
-    const u128_neon b1 = vld1q_u8((const uint8_t *)buf + 16);
-    const u128_neon b2 = vld1q_u8((const uint8_t *)buf + 32);
-    const u128_neon b3 = vld1q_u8((const uint8_t *)buf + 48);
     const u128_neon pbuf_copy[4] = {
-        veorq_u8(b0, b2),
-        veorq_u8(b1, b3),
-        b2, b3
+        veorq_u8(buf[0], buf[2]),
+        veorq_u8(buf[1], buf[3]),
+        buf[2], buf[3]
     };
     const u128_neon *pbuf;
     u128_neon acc = vld1q_u8((uint8_t *)(randomsource + (keyMask + 2)));

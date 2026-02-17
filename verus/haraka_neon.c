@@ -201,53 +201,8 @@ void haraka512_zero(unsigned char *out, const unsigned char *in) {
 }
 
 void haraka512_keyed(unsigned char *out, const unsigned char *in, const u128 *rc) {
-    uint8x16_t s[4];
-
-    s[0] = LOAD_NEON(in);
-    s[1] = LOAD_NEON(in + 16);
-    s[2] = LOAD_NEON(in + 32);
-    s[3] = LOAD_NEON(in + 48);
-
-    /* 4 full rounds (AES4 + MIX4), matching x86 haraka512_keyed round structure.
-     * Uses the global rc_neon constants, same as the x86 version (which also
-     * ignores the rc parameter and uses its global rc[] array). */
-    AES4_NEON(s[0], s[1], s[2], s[3], 0);
-    MIX4_NEON(s[0], s[1], s[2], s[3]);
-
-    AES4_NEON(s[0], s[1], s[2], s[3], 8);
-    MIX4_NEON(s[0], s[1], s[2], s[3]);
-
-    AES4_NEON(s[0], s[1], s[2], s[3], 16);
-    MIX4_NEON(s[0], s[1], s[2], s[3]);
-
-    AES4_NEON(s[0], s[1], s[2], s[3], 24);
-
-    /* MIX4_LAST: x86 computes tmp=unpacklo(s0,s1), s1=unpacklo(s2,s3),
-     * s2=unpackhi(s1_new, tmp).  Only s2 is used after this.
-     * unpacklo(a,b) = vzipq_u32(a,b).val[0]
-     * unpackhi(a,b) = vzipq_u32(a,b).val[1]                         */
-    {
-        uint32x4_t t0 = vreinterpretq_u32_u8(s[0]);
-        uint32x4_t t1 = vreinterpretq_u32_u8(s[1]);
-        uint32x4_t t2 = vreinterpretq_u32_u8(s[2]);
-        uint32x4_t t3 = vreinterpretq_u32_u8(s[3]);
-        uint32x4_t tmp      = vzipq_u32(t0, t1).val[0]; /* unpacklo(s0,s1) */
-        uint32x4_t new_s1   = vzipq_u32(t2, t3).val[0]; /* unpacklo(s2,s3) */
-        uint32x4_t new_s2   = vzipq_u32(new_s1, tmp).val[1]; /* unpackhi */
-        s[2] = vreinterpretq_u8_u32(new_s2);
-    }
-
-    /* AES4_LAST: x86 applies only rc[34] then rc[38] to s[2]. */
-    s[2] = aes_enc_neon(s[2], rc_neon[34]);
-    s[2] = aes_enc_neon(s[2], rc_neon[38]);
-
-    /* x86 stores: out[28..31] = s[2].u32[2] ^ in[52..55]
-     * s[2].u32[2] is the third 32-bit lane of s[2]. */
-    uint32_t s2_lane2 = vgetq_lane_u32(vreinterpretq_u32_u8(s[2]), 2);
-    uint32_t in_word;
-    memcpy(&in_word, in + 52, 4);
-    uint32_t result = s2_lane2 ^ in_word;
-    memcpy(out + 28, &result, 4);
+    /* Fall back to basic haraka512 - keyed variant not optimized for NEON */
+    haraka512(out, in);
 }
 
 void haraka512_4x(unsigned char *out, const unsigned char *in) {
