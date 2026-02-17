@@ -92,7 +92,7 @@ jobs:
               if [ "${{ matrix.arch }}" = "x86_64" ]; then
                 FLAGS="-maes -msse3 -mssse3 -mpclmul"
               elif [ "${{ matrix.arch }}" = "armv7" ]; then
-                FLAGS="-mfpu=neon -mfloat-abi=softfp"
+                FLAGS="-mfpu=neon"
               elif [ "${{ matrix.arch }}" = "aarch64" ]; then
                 FLAGS=""
               else
@@ -100,8 +100,8 @@ jobs:
               fi
               
               ./configure \
-                CFLAGS="-O3 $FLAGS -static" \
-                CXXFLAGS="-O3 $FLAGS -static" \
+                CFLAGS="-O3 $FLAGS" \
+                CXXFLAGS="-O3 $FLAGS" \
                 LDFLAGS="-static" \
                 --with-curl \
                 --disable-dependency-tracking
@@ -151,6 +151,7 @@ jobs:
         with:
           files: release/*
           body: |
+
             Download, chmod +x, and run
             
             Checksums: SHA256SUMS
