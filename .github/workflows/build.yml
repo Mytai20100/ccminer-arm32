@@ -92,6 +92,18 @@ jobs:
                 sed -i "s/u128 \*data_key =  (u128\*)malloc(VERUS_KEY_SIZE + 1024);/u128 *data_key; posix_memalign((void**)\&data_key, 16, VERUS_KEY_SIZE + 1024);/" verus/verusscan.cpp
               fi
               
+              # Swap x86 haraka.c -> haraka_neon.c and verus_clhash.cpp -> verus_clhash_neon.cpp for ARM
+              if [ "${{ matrix.arch }}" = "armv7" ] || [ "${{ matrix.arch }}" = "aarch64" ]; then
+                if [ -f verus/haraka_neon.c ] && [ -f verus/haraka.c ]; then
+                  cp verus/haraka.c verus/haraka_x86.c.bak
+                  cp verus/haraka_neon.c verus/haraka.c
+                fi
+                if [ -f verus/verus_clhash_neon.cpp ] && [ -f verus/verus_clhash.cpp ]; then
+                  cp verus/verus_clhash.cpp verus/verus_clhash_x86.cpp.bak
+                  cp verus/verus_clhash_neon.cpp verus/verus_clhash.cpp
+                fi
+              fi
+              
               sh autogen.sh
               
               if [ "${{ matrix.arch }}" = "x86_64" ]; then
@@ -157,8 +169,6 @@ jobs:
         with:
           files: release/*
           body: |
-            Download, chmod +x, and run
-            
             Checksums: SHA256SUMS
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
