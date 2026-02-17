@@ -48,4 +48,51 @@ u128_neon __verusclmulwithoutreduction64alignedrepeatv2_2_neon(
 uint64_t verusclhashv2_2(void * random, const unsigned char buf[64], uint64_t keyMask, uint32_t *fixrand, uint32_t *fixrandex,
 	void *g_prand, void *g_prandex);
 
+void *alloc_aligned_buffer(uint64_t bufSize);
+
+#ifdef __cplusplus
+#include <memory>
+#include "uint256.h"
+
+/* Key size constants — must match VERUSKEYSIZE enum in the x86 path */
+enum {
+    VERUSKEYSIZE_NEON       = 1024 * 8 + (40 * 16),  /* 8832 bytes */
+    VERUSHHASH_SOLUTION_VERSION_NEON = 1
+};
+
+struct verusclhash_descr {
+    uint256 seed;
+    int keySizeInBytes;
+
+    verusclhash_descr() : keySizeInBytes(VERUSKEYSIZE_NEON) {}
+};
+
+/* Forward declarations of globally shared key/descriptor buffers */
+extern std::shared_ptr<void> verusclhasher_key;
+extern std::shared_ptr<void> verusclhasher_descr;
+
+struct verusclhasher {
+    uint64_t keyMask;  /* = 511, in units of u128 (16 bytes each) */
+    mutable uint32_t   fixrand[32];
+    mutable uint32_t   fixrandex[32];
+    mutable u128_neon  g_prand[32];
+    mutable u128_neon  g_prandex[32];
+
+    verusclhasher();
+
+    inline uint64_t operator()(const unsigned char *buf, void *key) const
+    {
+        return verusclhashv2_2(key, buf, keyMask,
+                               fixrand, fixrandex,
+                               g_prand, g_prandex);
+    }
+
+    inline void *gethashkey() const
+    {
+        return verusclhasher_key.get();
+    }
+};
+
+#endif /* __cplusplus */
+
 #endif /* VERUS_CLHASH_NEON_H_ */
