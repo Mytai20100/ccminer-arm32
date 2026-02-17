@@ -180,8 +180,35 @@ void haraka256(unsigned char *out, const unsigned char *in) {
 }
 
 void haraka256_keyed(unsigned char *out, const unsigned char *in, const u128 *rc) {
-    /* Fall back to basic haraka256 - keyed variant not optimized for NEON */
-    haraka256(out, in);
+    uint8x16_t s[2];
+
+    s[0] = LOAD_NEON(in);
+    s[1] = LOAD_NEON(in + 16);
+
+    /* 5 rounds of AES using the caller-supplied round constants */
+#define AES2_KEYED_NEON(s0, s1, rci) \
+    s0 = aes_enc_neon(s0, rc[(rci)]); \
+    s1 = aes_enc_neon(s1, rc[(rci) + 1]); \
+    s0 = aes_enc_neon(s0, rc[(rci) + 2]); \
+    s1 = aes_enc_neon(s1, rc[(rci) + 3]);
+
+    AES2_KEYED_NEON(s[0], s[1],  0);
+    MIX2_NEON(s[0], s[1]);
+    AES2_KEYED_NEON(s[0], s[1],  4);
+    MIX2_NEON(s[0], s[1]);
+    AES2_KEYED_NEON(s[0], s[1],  8);
+    MIX2_NEON(s[0], s[1]);
+    AES2_KEYED_NEON(s[0], s[1], 12);
+    MIX2_NEON(s[0], s[1]);
+    AES2_KEYED_NEON(s[0], s[1], 16);
+    MIX2_NEON(s[0], s[1]);
+#undef AES2_KEYED_NEON
+
+    s[0] = veorq_u8(s[0], LOAD_NEON(in));
+    s[1] = veorq_u8(s[1], LOAD_NEON(in + 16));
+
+    STORE_NEON(out,      s[0]);
+    STORE_NEON(out + 16, s[1]);
 }
 
 void haraka256_4x(unsigned char *out, const unsigned char *in) {
@@ -201,8 +228,43 @@ void haraka512_zero(unsigned char *out, const unsigned char *in) {
 }
 
 void haraka512_keyed(unsigned char *out, const unsigned char *in, const u128 *rc) {
-    /* Fall back to basic haraka512 - keyed variant not optimized for NEON */
-    haraka512(out, in);
+    uint8x16_t s[4];
+
+    s[0] = LOAD_NEON(in);
+    s[1] = LOAD_NEON(in + 16);
+    s[2] = LOAD_NEON(in + 32);
+    s[3] = LOAD_NEON(in + 48);
+
+    /* 5 rounds of AES using the caller-supplied round constants.
+     * Each round uses 8 keys: 2 per state word, 4 words. */
+#define AES4_KEYED_NEON(s0,s1,s2,s3,rci) \
+    s0 = aes_enc_neon(s0, rc[(rci)]); \
+    s1 = aes_enc_neon(s1, rc[(rci)+1]); \
+    s2 = aes_enc_neon(s2, rc[(rci)+2]); \
+    s3 = aes_enc_neon(s3, rc[(rci)+3]); \
+    s0 = aes_enc_neon(s0, rc[(rci)+4]); \
+    s1 = aes_enc_neon(s1, rc[(rci)+5]); \
+    s2 = aes_enc_neon(s2, rc[(rci)+6]); \
+    s3 = aes_enc_neon(s3, rc[(rci)+7]);
+
+    AES4_KEYED_NEON(s[0], s[1], s[2], s[3],  0);
+    MIX4_NEON(s[0], s[1], s[2], s[3]);
+    AES4_KEYED_NEON(s[0], s[1], s[2], s[3],  8);
+    MIX4_NEON(s[0], s[1], s[2], s[3]);
+    AES4_KEYED_NEON(s[0], s[1], s[2], s[3], 16);
+    MIX4_NEON(s[0], s[1], s[2], s[3]);
+    AES4_KEYED_NEON(s[0], s[1], s[2], s[3], 24);
+    MIX4_NEON(s[0], s[1], s[2], s[3]);
+    AES4_KEYED_NEON(s[0], s[1], s[2], s[3], 32);
+    MIX4_NEON(s[0], s[1], s[2], s[3]);
+#undef AES4_KEYED_NEON
+
+    s[0] = veorq_u8(s[0], LOAD_NEON(in));
+    s[1] = veorq_u8(s[1], LOAD_NEON(in + 16));
+    s[2] = veorq_u8(s[2], LOAD_NEON(in + 32));
+    s[3] = veorq_u8(s[3], LOAD_NEON(in + 48));
+
+    TRUNCSTORE_NEON(out, s[0], s[1], s[2], s[3]);
 }
 
 void haraka512_4x(unsigned char *out, const unsigned char *in) {
