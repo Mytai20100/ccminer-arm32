@@ -17,12 +17,16 @@ This provides the PoW hash function for Verus, enabling CPU mining.
 #include "uint256.h"
 #include "verus_clhash.h"
 
+// On ARM, haraka_neon.h already defines u128 = uint8x16_t and all haraka
+// function declarations — do NOT include the x86 haraka headers or we get
+// a conflicting typedef for u128.
+#if !defined(__ARM_NEON) && !defined(__aarch64__) && !defined(__arm__)
 extern "C" 
 {
 #include "haraka.h"
 #include "haraka_portable.h"
-
 }
+#endif
 
 class CVerusHash
 {
@@ -102,11 +106,7 @@ class CVerusHashV2
             result = buf2;
             curPos = 0;
             std::fill(buf1, buf1 + sizeof(buf1), 0);
-
-			return *this;
-
             return *this;
-
         }
 
         inline int64_t *ExtraI64Ptr() { return (int64_t *)(curBuf + 32); }
