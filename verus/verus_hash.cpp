@@ -96,6 +96,14 @@ void (*CVerusHashV2::haraka256Function)(unsigned char *out, const unsigned char 
 
 void CVerusHashV2::init()
 {
+#if defined(__ARM_NEON) || defined(__aarch64__) || defined(__arm__)
+    /* On ARM we always use the NEON implementations.
+     * load_constants() calls load_constants_neon() via the wrapper in haraka_neon.c */
+    load_constants();
+    haraka512Function       = &haraka512;
+    haraka512KeyedFunction  = &haraka512_keyed;
+    haraka256Function       = &haraka256;
+#else
     if (IsCPUVerusOptimized())
     {
         load_constants();
@@ -111,6 +119,7 @@ void CVerusHashV2::init()
         haraka512KeyedFunction = &haraka512_port_keyed;
         haraka256Function = &haraka256_port;
     }
+#endif
 }
 
 void CVerusHashV2::Hash(void *result, const void *data, size_t len)
