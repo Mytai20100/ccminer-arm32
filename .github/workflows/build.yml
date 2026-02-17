@@ -79,8 +79,9 @@ jobs:
           if [ "$TARGET_ARCH" = "armv7" ]; then
 
             # BUG FIX 2: data_key alignment - replace malloc with posix_memalign(16)
+            # NOTE: \& in sed replacement = literal '&' (unescaped & = whole match)
             if [ -f verus/verusscan.cpp ]; then
-              sed -i 's|u128 \*data_key =  (u128\*)malloc(VERUS_KEY_SIZE + 1024);|u128 *data_key = NULL; if (posix_memalign((void **)&data_key, 16, VERUS_KEY_SIZE + 1024) != 0) return 0;|' verus/verusscan.cpp
+              sed -i 's|u128 \*data_key =  (u128\*)malloc(VERUS_KEY_SIZE + 1024);|u128 *data_key = NULL; if (posix_memalign((void **)\&data_key, 16, VERUS_KEY_SIZE + 1024) != 0) return 0;|' verus/verusscan.cpp
             fi
 
             # BUG FIX 3: blockhash_half stack alignment
