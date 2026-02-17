@@ -28,13 +28,12 @@ static inline uint64x2_t clmul_neon(uint64x2_t a, uint64x2_t b, int imm) {
 static inline uint64x2_t clmul_neon(uint64x2_t a, uint64x2_t b, int imm) {
     uint64_t a_val = (imm & 0x01) ? vgetq_lane_u64(a, 1) : vgetq_lane_u64(a, 0);
     uint64_t b_val = (imm & 0x10) ? vgetq_lane_u64(b, 1) : vgetq_lane_u64(b, 0);
-    uint64_t result = 0;
-    uint64_t temp_b = b_val;
+    uint64_t lo = 0, hi = 0;
     for (int i = 0; i < 64; i++) {
-        if (a_val & (1ULL << i)) result ^= temp_b;
-        temp_b <<= 1;
+        if (a_val & (1ULL << i)) lo ^= b_val << i;
+        if (i > 0 && (a_val & (1ULL << i))) hi ^= b_val >> (64 - i);
     }
-    return vcombine_u64(vcreate_u64(result), vcreate_u64(0));
+    return vcombine_u64(vcreate_u64(lo), vcreate_u64(hi));
 }
 
 #endif

@@ -73,39 +73,12 @@ jobs:
           chmod -R u+rwx .
           chmod +x autogen.sh install-sh compile config.guess config.sub missing depcomp 2>/dev/null || true
 
-          # -------------------------------------------------------------------
-          # ARMv7 patches
-          # -------------------------------------------------------------------
-          if [ "$TARGET_ARCH" = "armv7" ]; then
-
-            # BUG FIX 2: data_key alignment - replace malloc with posix_memalign(16)
-            # NOTE: \& in sed replacement = literal '&' (unescaped & = whole match)
-            if [ -f verus/verusscan.cpp ]; then
-              sed -i 's|u128 \*data_key =  (u128\*)malloc(VERUS_KEY_SIZE + 1024);|u128 *data_key = NULL; if (posix_memalign((void **)\&data_key, 16, VERUS_KEY_SIZE + 1024) != 0) return 0;|' verus/verusscan.cpp
-            fi
-
-            # BUG FIX 3: blockhash_half stack alignment
-            if [ -f verus/verusscan.cpp ]; then
-              sed -i 's|uint8_t blockhash_half\[64\] = { 0 };|uint8_t __attribute__((aligned(16))) blockhash_half[64] = { 0 };|' verus/verusscan.cpp
-            fi
-
-            # BUG FIX 4: buf2 alignment - split combined alignas declaration
-            if [ -f verus/verusscan.cpp ]; then
-              sed -i 's|alignas(32) unsigned char buf1\[64\] = { 0 }, buf2\[64\];|alignas(32) unsigned char buf1[64] = { 0 };\n\talignas(32) unsigned char buf2[64];|' verus/verusscan.cpp
-            fi
-
-          fi
-
-          # -------------------------------------------------------------------
-          # AArch64 patches: swap in NEON-optimised sources (has hw AES)
-          # -------------------------------------------------------------------
+          # AArch64: swap in NEON-optimised sources (has hw AES + PMULL)
           if [ "$TARGET_ARCH" = "aarch64" ]; then
             if [ -f verus/haraka_neon.c ] && [ -f verus/haraka.c ]; then
-              cp verus/haraka.c verus/haraka_x86.c.bak
               cp verus/haraka_neon.c verus/haraka.c
             fi
             if [ -f verus/verus_clhash_neon.cpp ] && [ -f verus/verus_clhash.cpp ]; then
-              cp verus/verus_clhash.cpp verus/verus_clhash_x86.cpp.bak
               cp verus/verus_clhash_neon.cpp verus/verus_clhash.cpp
             fi
           fi

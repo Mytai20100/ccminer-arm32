@@ -89,7 +89,8 @@ extern "C" inline void FixKey(uint32_t *fixrand, uint32_t *fixrandex, u128 *keyb
 
  extern "C" inline void VerusHashHalf(void *result2, unsigned char *data, int len)
 {
-	alignas(32) unsigned char buf1[64] = { 0 }, buf2[64];
+	alignas(32) unsigned char buf1[64] = { 0 };
+	alignas(32) unsigned char buf2[64];
 	unsigned char *curBuf = buf1, *result = buf2;
 	int curPos = 0;
 	//unsigned char result[64];
@@ -216,10 +217,10 @@ extern "C" int scanhash_verus(int thr_id, struct work *work, uint32_t max_nonce,
 
 	uint32_t *pdata = work->data;
 	uint32_t *ptarget = work->target;
-	uint8_t blockhash_half[64] = { 0 };
+	uint8_t __attribute__((aligned(16))) blockhash_half[64] = { 0 };
 	uint8_t gpuinit = 0;
 	struct timeval tv_start, tv_end;
-	u128 *data_key =  (u128*)malloc(VERUS_KEY_SIZE + 1024);
+	u128 *data_key = NULL; if (posix_memalign((void **)&data_key, 16, VERUS_KEY_SIZE + 1024) != 0) return 0;
 	u128 *data_key_prand = data_key + VERUS_KEY_SIZE128 ;
 	u128 *data_key_prandex = data_key + VERUS_KEY_SIZE128 + 32;
 
