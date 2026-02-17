@@ -81,19 +81,67 @@ jobs:
               chmod -R u+rwx .
               chmod +x autogen.sh install-sh compile config.guess config.sub missing depcomp 2>/dev/null || true
               
-              # Fix ARMv7 unaligned access
-              if [ "${{ matrix.arch }}" = "armv7" ] && [ -f verus/haraka_neon.h ]; then
-                sed -i "s/#define LOAD_NEON(src) vld1q_u8((const uint8_t \*)(src))/static inline uint8x16_t LOAD_NEON(const void *s) { uint8x16_t r; __builtin_memcpy(\&r,s,16); return r; }/g" verus/haraka_neon.h
-                sed -i "s/#define STORE_NEON(dest, src) vst1q_u8((uint8_t \*)(dest), src)/static inline void STORE_NEON(void *d, uint8x16_t s) { __builtin_memcpy(d,\&s,16); }/g" verus/haraka_neon.h
+              # ---------------------------------------------------------------
+              # ARMv7 patches
+              # ---------------------------------------------------------------
+              if [ "${{ matrix.arch }}" = "armv7" ]; then
+
+                # BUG FIX 1 (Bus Error): LOAD_NEON/STORE_NEON already use
+                # vld1q_u8/vst1q_u8 which are unaligned-safe on ARMv7, so no
+                # macro patch is needed.  The real alignment hazard is the
+                # direct typed u128_neon* dereferences in verus_clhash_neon.cpp
+                # and stack buffers in verusscan.cpp.  Those are fixed in the
+                # source files directly (see verus_clhash_neon.cpp and
+                # verusscan.cpp).  Do NOT sed-replace LOAD_NEON/STORE_NEON:
+                # that replaced a #define with a function that would still have
+                # the same alignment contract.
+
+                # BUG FIX 2 (Bus Error): data_key alignment.
+                # malloc on Android bionic guarantees only 8-byte alignment.
+                # u128_neon typed pointer access on this buffer can generate
+                # aligned NEON loads requiring 16 bytes on Cortex-A7.
+                # Replace malloc with posix_memalign(16).
+                if [ -f verus/verusscan.cpp ]; then
+                  sed -i 's|u128 \*data_key =  (u128\*)malloc(VERUS_KEY_SIZE + 1024);|u128 *data_key = NULL; if (posix_memalign((void **)&data_key, 16, VERUS_KEY_SIZE + 1024) != 0) return 0;|' verus/verusscan.cpp
+                fi
+
+                # BUG FIX 3 (Bus Error): blockhash_half alignment.
+                # uint8_t blockhash_half[64] on the stack may land at a
+                # 1-byte-aligned address. It is cast to u128_neon* inside
+                # verusclhashv2_2, and the resulting typed pointer dereferences
+                # emit aligned NEON loads that fault on Cortex-A7 unless the
+                # buffer is 16-byte aligned.
+                if [ -f verus/verusscan.cpp ]; then
+                  sed -i 's|uint8_t blockhash_half\[64\] = { 0 };|uint8_t __attribute__((aligned(16))) blockhash_half[64] = { 0 };|' verus/verusscan.cpp
+                fi
+
+                # BUG FIX 4 (Bus Error): buf2 alignment in VerusHashHalf.
+                # alignas(32) in a combined declaration only aligns the first
+                # variable. buf2 inherits no alignment and may fault when used
+                # with NEON typed loads. Split into two declarations.
+                if [ -f verus/verusscan.cpp ]; then
+                  sed -i 's|alignas(32) unsigned char buf1\[64\] = { 0 }, buf2\[64\];|alignas(32) unsigned char buf1[64] = { 0 };\n\talignas(32) unsigned char buf2[64];|' verus/verusscan.cpp
+                fi
+
+                # Cortex-A7 has NEON but no AES/PMULL hardware extensions.
+                # The NEON haraka path uses aes_enc_neon which without
+                # __ARM_FEATURE_CRYPTO falls back to plain XOR, producing
+                # hashes incompatible with the Verus network protocol.
+                # Use the portable software-AES haraka instead.
+                #
+                # NOTE: The armv7 NEON files (haraka_neon.c, verus_clhash_neon.cpp)
+                # are NOT swapped in for armv7 for this reason. They are only
+                # correct when __ARM_FEATURE_CRYPTO (hardware AES+PMULL) is
+                # present, which requires Cortex-A53 or newer (AArch64 or ARMv8
+                # cores). Leave haraka.c pointing at the x86 implementation
+                # which configure will replace with the portable path via
+                # haraka_portable.c when the CPU does not have AES-NI.
               fi
-              
-              # Fix ARMv7 malloc alignment for NEON buffers
-              if [ "${{ matrix.arch }}" = "armv7" ] && [ -f verus/verusscan.cpp ]; then
-                sed -i "s/u128 \*data_key =  (u128\*)malloc(VERUS_KEY_SIZE + 1024);/u128 *data_key; posix_memalign((void**)\&data_key, 16, VERUS_KEY_SIZE + 1024);/" verus/verusscan.cpp
-              fi
-              
-              # Swap x86 haraka.c -> haraka_neon.c and verus_clhash.cpp -> verus_clhash_neon.cpp for ARM
-              if [ "${{ matrix.arch }}" = "armv7" ] || [ "${{ matrix.arch }}" = "aarch64" ]; then
+
+              # ---------------------------------------------------------------
+              # AArch64 patches: swap in NEON-optimised sources (has hw AES)
+              # ---------------------------------------------------------------
+              if [ "${{ matrix.arch }}" = "aarch64" ]; then
                 if [ -f verus/haraka_neon.c ] && [ -f verus/haraka.c ]; then
                   cp verus/haraka.c verus/haraka_x86.c.bak
                   cp verus/haraka_neon.c verus/haraka.c
@@ -109,10 +157,14 @@ jobs:
               if [ "${{ matrix.arch }}" = "x86_64" ]; then
                 FLAGS="-maes -msse3 -mssse3 -mpclmul"
               elif [ "${{ matrix.arch }}" = "armv7" ]; then
-                # Disable crypto extension - Cortex-A7 has NEON but no AES/PMULL
-                FLAGS="-mfpu=neon -U__ARM_FEATURE_CRYPTO"
+                # No -U__ARM_FEATURE_CRYPTO: leave the preprocessor alone.
+                # The portable haraka path is selected at runtime via
+                # IsCPUVerusOptimized() / CVerusHashV2::init() when no
+                # hardware AES is detected.
+                FLAGS="-mfpu=neon"
               elif [ "${{ matrix.arch }}" = "aarch64" ]; then
-                FLAGS=""
+                # AArch64 Cortex-A53+ has hardware AES and PMULL.
+                FLAGS="-march=armv8-a+crypto"
               else
                 FLAGS=""
               fi
