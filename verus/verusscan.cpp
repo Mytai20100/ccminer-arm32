@@ -89,7 +89,10 @@ extern "C" inline void FixKey(uint32_t *fixrand, uint32_t *fixrandex, u128 *keyb
 
  extern "C" inline void VerusHashHalf(void *result2, unsigned char *data, int len)
 {
-	alignas(32) unsigned char buf1[64] = { 0 }, buf2[64];
+	/* alignas only applies per-variable; declare buf2 separately so it also
+	 * gets 32-byte alignment for NEON 128-bit typed access. */
+	alignas(32) unsigned char buf1[64] = { 0 };
+	alignas(32) unsigned char buf2[64];
 	unsigned char *curBuf = buf1, *result = buf2;
 	int curPos = 0;
 	//unsigned char result[64];
@@ -216,10 +219,18 @@ extern "C" int scanhash_verus(int thr_id, struct work *work, uint32_t max_nonce,
 
 	uint32_t *pdata = work->data;
 	uint32_t *ptarget = work->target;
-	uint8_t blockhash_half[64] = { 0 };
+	/* Must be 16-byte aligned: passed to verusclhashv2_2 which casts to u128_neon*
+	 * and accesses it through typed NEON pointer arithmetic. Unaligned base address
+	 * causes a Data Abort (Bus error) on Cortex-A7. */
+	uint8_t __attribute__((aligned(16))) blockhash_half[64] = { 0 };
 	uint8_t gpuinit = 0;
 	struct timeval tv_start, tv_end;
-	u128 *data_key =  (u128*)malloc(VERUS_KEY_SIZE + 1024);
+	/* posix_memalign guarantees 16-byte alignment required by u128_neon typed
+	 * pointer access. malloc only guarantees 8-byte alignment on bionic, which
+	 * is insufficient for ARMv7 NEON typed pointer dereferences. */
+	u128 *data_key = NULL;
+	if (posix_memalign((void **)&data_key, 16, VERUS_KEY_SIZE + 1024) != 0)
+		return 0;
 	u128 *data_key_prand = data_key + VERUS_KEY_SIZE128 ;
 	u128 *data_key_prandex = data_key + VERUS_KEY_SIZE128 + 32;
 
