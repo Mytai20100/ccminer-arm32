@@ -31,13 +31,17 @@ jobs:
         uses: docker/setup-qemu-action@v3
       
       - name: Build ${{ matrix.arch }}
+        env:
+          TARGET_ARCH: ${{ matrix.arch }}
+          TARGET_PLATFORM: ${{ matrix.platform }}
         run: |
           docker run --rm \
-            --platform ${{ matrix.platform }} \
-            -v $PWD:/src \
+            --platform "$TARGET_PLATFORM" \
+            -v "$PWD":/src \
             -w /src \
+            -e TARGET_ARCH="$TARGET_ARCH" \
             alpine:3.19 \
-            sh -c '
+            sh << 'DOCKERSCRIPT'
               apk add --no-cache build-base automake autoconf libtool \
                 openssl-dev openssl-libs-static \
                 zlib-dev zlib-static \
@@ -84,20 +88,10 @@ jobs:
               # ---------------------------------------------------------------
               # ARMv7 patches
               # ---------------------------------------------------------------
-              if [ "${{ matrix.arch }}" = "armv7" ]; then
-
-                # BUG FIX 1 (Bus Error): LOAD_NEON/STORE_NEON already use
-                # vld1q_u8/vst1q_u8 which are unaligned-safe on ARMv7, so no
-                # macro patch is needed.  The real alignment hazard is the
-                # direct typed u128_neon* dereferences in verus_clhash_neon.cpp
-                # and stack buffers in verusscan.cpp.  Those are fixed in the
-                # source files directly (see verus_clhash_neon.cpp and
-                # verusscan.cpp).  Do NOT sed-replace LOAD_NEON/STORE_NEON:
-                # that replaced a #define with a function that would still have
-                # the same alignment contract.
+              if [ "$TARGET_ARCH" = "armv7" ]; then
 
                 # BUG FIX 2 (Bus Error): data_key alignment.
-                # malloc on Android bionic guarantees only 8-byte alignment.
+                # malloc on Alpine musl guarantees only 8-byte alignment.
                 # u128_neon typed pointer access on this buffer can generate
                 # aligned NEON loads requiring 16 bytes on Cortex-A7.
                 # Replace malloc with posix_memalign(16).
@@ -106,42 +100,21 @@ jobs:
                 fi
 
                 # BUG FIX 3 (Bus Error): blockhash_half alignment.
-                # uint8_t blockhash_half[64] on the stack may land at a
-                # 1-byte-aligned address. It is cast to u128_neon* inside
-                # verusclhashv2_2, and the resulting typed pointer dereferences
-                # emit aligned NEON loads that fault on Cortex-A7 unless the
-                # buffer is 16-byte aligned.
                 if [ -f verus/verusscan.cpp ]; then
                   sed -i 's|uint8_t blockhash_half\[64\] = { 0 };|uint8_t __attribute__((aligned(16))) blockhash_half[64] = { 0 };|' verus/verusscan.cpp
                 fi
 
                 # BUG FIX 4 (Bus Error): buf2 alignment in VerusHashHalf.
-                # alignas(32) in a combined declaration only aligns the first
-                # variable. buf2 inherits no alignment and may fault when used
-                # with NEON typed loads. Split into two declarations.
                 if [ -f verus/verusscan.cpp ]; then
                   sed -i 's|alignas(32) unsigned char buf1\[64\] = { 0 }, buf2\[64\];|alignas(32) unsigned char buf1[64] = { 0 };\n\talignas(32) unsigned char buf2[64];|' verus/verusscan.cpp
                 fi
 
-                # Cortex-A7 has NEON but no AES/PMULL hardware extensions.
-                # The NEON haraka path uses aes_enc_neon which without
-                # __ARM_FEATURE_CRYPTO falls back to plain XOR, producing
-                # hashes incompatible with the Verus network protocol.
-                # Use the portable software-AES haraka instead.
-                #
-                # NOTE: The armv7 NEON files (haraka_neon.c, verus_clhash_neon.cpp)
-                # are NOT swapped in for armv7 for this reason. They are only
-                # correct when __ARM_FEATURE_CRYPTO (hardware AES+PMULL) is
-                # present, which requires Cortex-A53 or newer (AArch64 or ARMv8
-                # cores). Leave haraka.c pointing at the x86 implementation
-                # which configure will replace with the portable path via
-                # haraka_portable.c when the CPU does not have AES-NI.
               fi
 
               # ---------------------------------------------------------------
               # AArch64 patches: swap in NEON-optimised sources (has hw AES)
               # ---------------------------------------------------------------
-              if [ "${{ matrix.arch }}" = "aarch64" ]; then
+              if [ "$TARGET_ARCH" = "aarch64" ]; then
                 if [ -f verus/haraka_neon.c ] && [ -f verus/haraka.c ]; then
                   cp verus/haraka.c verus/haraka_x86.c.bak
                   cp verus/haraka_neon.c verus/haraka.c
@@ -154,16 +127,11 @@ jobs:
               
               sh autogen.sh
               
-              if [ "${{ matrix.arch }}" = "x86_64" ]; then
+              if [ "$TARGET_ARCH" = "x86_64" ]; then
                 FLAGS="-maes -msse3 -mssse3 -mpclmul"
-              elif [ "${{ matrix.arch }}" = "armv7" ]; then
-                # No -U__ARM_FEATURE_CRYPTO: leave the preprocessor alone.
-                # The portable haraka path is selected at runtime via
-                # IsCPUVerusOptimized() / CVerusHashV2::init() when no
-                # hardware AES is detected.
+              elif [ "$TARGET_ARCH" = "armv7" ]; then
                 FLAGS="-mfpu=neon"
-              elif [ "${{ matrix.arch }}" = "aarch64" ]; then
-                # AArch64 Cortex-A53+ has hardware AES and PMULL.
+              elif [ "$TARGET_ARCH" = "aarch64" ]; then
                 FLAGS="-march=armv8-a+crypto"
               else
                 FLAGS=""
@@ -184,10 +152,10 @@ jobs:
               fi
               
               strip ccminer 2>/dev/null || true
-              mv ccminer ccminer-${{ matrix.arch }}
-              file ccminer-${{ matrix.arch }}
-              ldd ccminer-${{ matrix.arch }} 2>&1 | grep -q "not a dynamic" && echo "Static OK" || echo "Warning: not static"
-            '
+              mv ccminer ccminer-"$TARGET_ARCH"
+              file ccminer-"$TARGET_ARCH"
+              ldd ccminer-"$TARGET_ARCH" 2>&1 | grep -q "not a dynamic" && echo "Static OK" || echo "Warning: not static"
+DOCKERSCRIPT
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
