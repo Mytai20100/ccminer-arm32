@@ -22,11 +22,14 @@ jobs:
             platform: linux/arm64
             cc: gcc
             cxx: g++
+    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
+      
       - name: Build ${{ matrix.arch }}
         run: |
           docker run --rm \
@@ -40,6 +43,8 @@ jobs:
                 zlib-dev zlib-static \
                 linux-headers git wget \
                 jansson-dev jansson-static
+              
+              # Build minimal static curl
               cd /tmp
               wget -q https://curl.se/download/curl-8.5.0.tar.gz
               tar xzf curl-8.5.0.tar.gz
@@ -70,50 +75,68 @@ jobs:
                 --without-nghttp2
               make -j$(nproc)
               make install
+              
+              # Build ccminer
               cd /src
               chmod -R u+rwx .
               chmod +x autogen.sh install-sh compile config.guess config.sub missing depcomp 2>/dev/null || true
+              
+              # Fix ARMv7 unaligned access
+              if [ "${{ matrix.arch }}" = "armv7" ] && [ -f verus/haraka_neon.h ]; then
+                sed -i "s/#define LOAD_NEON(src) vld1q_u8((const uint8_t \*)(src))/static inline uint8x16_t LOAD_NEON(const void *s) { uint8x16_t r; __builtin_memcpy(\&r,s,16); return r; }/g" verus/haraka_neon.h
+                sed -i "s/#define STORE_NEON(dest, src) vst1q_u8((uint8_t \*)(dest), src)/static inline void STORE_NEON(void *d, uint8x16_t s) { __builtin_memcpy(d,\&s,16); }/g" verus/haraka_neon.h
+              fi
+              
               sh autogen.sh
+              
               if [ "${{ matrix.arch }}" = "x86_64" ]; then
                 FLAGS="-maes -msse3 -mssse3 -mpclmul"
               elif [ "${{ matrix.arch }}" = "armv7" ]; then
-                FLAGS="-mfpu=neon"
+                FLAGS="-mfpu=neon -mfloat-abi=softfp"
               elif [ "${{ matrix.arch }}" = "aarch64" ]; then
                 FLAGS=""
               else
                 FLAGS=""
               fi
+              
               ./configure \
                 CFLAGS="-O3 $FLAGS -static" \
                 CXXFLAGS="-O3 $FLAGS -static" \
                 LDFLAGS="-static" \
                 --with-curl \
                 --disable-dependency-tracking
+              
               make -j$(nproc) || exit 1
+              
               if [ ! -f ccminer ]; then
                 echo "Build failed - binary not found"
                 exit 1
               fi
+              
               strip ccminer 2>/dev/null || true
               mv ccminer ccminer-${{ matrix.arch }}
               file ccminer-${{ matrix.arch }}
-              ldd ccminer-${{ matrix.arch }} 2>&1 | grep -q "not a dynamic" && echo "✓ Static binary" || echo "⚠ Dynamic binary"
+              ldd ccminer-${{ matrix.arch }} 2>&1 | grep -q "not a dynamic" && echo "Static OK" || echo "Warning: not static"
             '
+      
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ccminer-${{ matrix.arch }}
           path: ccminer-${{ matrix.arch }}
           if-no-files-found: error
+  
   release:
     needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
+    
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
+      
       - name: Prepare release
         run: |
           mkdir -p release
@@ -122,12 +145,14 @@ jobs:
           chmod +x ccminer-*
           sha256sum ccminer-* > SHA256SUMS
           ls -lh
+      
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: release/*
           body: |
             Download, chmod +x, and run
+            
             Checksums: SHA256SUMS
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
