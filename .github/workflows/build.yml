@@ -87,12 +87,18 @@ jobs:
                 sed -i "s/#define STORE_NEON(dest, src) vst1q_u8((uint8_t \*)(dest), src)/static inline void STORE_NEON(void *d, uint8x16_t s) { __builtin_memcpy(d,\&s,16); }/g" verus/haraka_neon.h
               fi
               
+              # Fix ARMv7 malloc alignment for NEON buffers
+              if [ "${{ matrix.arch }}" = "armv7" ] && [ -f verus/verusscan.cpp ]; then
+                sed -i "s/u128 \*data_key =  (u128\*)malloc(VERUS_KEY_SIZE + 1024);/u128 *data_key; posix_memalign((void**)\&data_key, 16, VERUS_KEY_SIZE + 1024);/" verus/verusscan.cpp
+              fi
+              
               sh autogen.sh
               
               if [ "${{ matrix.arch }}" = "x86_64" ]; then
                 FLAGS="-maes -msse3 -mssse3 -mpclmul"
               elif [ "${{ matrix.arch }}" = "armv7" ]; then
-                FLAGS="-mfpu=neon"
+                # Disable crypto extension - Cortex-A7 has NEON but no AES/PMULL
+                FLAGS="-mfpu=neon -U__ARM_FEATURE_CRYPTO"
               elif [ "${{ matrix.arch }}" = "aarch64" ]; then
                 FLAGS=""
               else
@@ -151,7 +157,6 @@ jobs:
         with:
           files: release/*
           body: |
-
             Download, chmod +x, and run
             
             Checksums: SHA256SUMS
