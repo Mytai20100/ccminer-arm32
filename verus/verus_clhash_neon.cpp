@@ -6,6 +6,7 @@ ARM NEON implementation of Verus CLHash
 #include "haraka_neon.h"
 #include <stdlib.h>
 #include <string.h>
+#include <memory>
 
 int __cpuverusoptimized = 0x80;
 
@@ -182,36 +183,53 @@ u128_neon __verusclmulwithoutreduction64alignedrepeatv2_2_neon(
             break;
         }
         case 0x18: {
-            const u128_neon temp1 = vld1q_u8((uint8_t *)prand);
-            const u128_neon temp2 = pbuf[(selector & 1) ? -1 : 1];
-            const uint64x2_t add1 = vreinterpretq_u64_u8(veorq_u8(temp1, temp2));
-            uint32_t divisor = (uint32_t)selector;
-            const uint64x2_t clprod1 = clmul_neon(add1, add1, 0x10);
-            acc = veorq_u8(vreinterpretq_u8_u64(clprod1), acc);
-            const int64_t dividend = vgetq_lane_u64(vreinterpretq_u64_u8(acc), 0);
-            const int64_t modulo = dividend % divisor;
-            acc = veorq_u8(vreinterpretq_u8_u64(vcombine_u64(vcreate_u64(modulo), vcreate_u64(0))), acc);
-            const u128_neon tempa1 = vld1q_u8((uint8_t *)prandex);
-            const u128_neon tempa2 = mulhrs_epi16_neon(acc, tempa1);
-            const u128_neon tempa3 = veorq_u8(tempa1, tempa2);
-            const u128_neon tempa4 = vld1q_u8((uint8_t *)pbuf);
-            vst1q_u8((uint8_t *)prandex, tempa3);
-            vst1q_u8((uint8_t *)prand, tempa4);
+            /* Must match x86 v2_2: loop with conditional division or clmul+mulhrs */
+            const u128_neon *buftmp = &pbuf[(selector & 1) ? -1 : 1];
+            uint64_t rounds = selector >> 61;
+            u128_neon *rc = prand;
+            u128_neon onekey;
+            do {
+                if (selector & (((uint64_t)0x10000000) << rounds)) {
+                    u128_neon temp2 = vld1q_u8((uint8_t *)(rounds & 1 ? pbuf : buftmp));
+                    onekey = veorq_u8(rc[0], temp2); rc++;
+                    /* integer division path */
+                    const int32_t  divisor  = (uint32_t)selector;
+                    const int64_t  dividend = (int64_t)vgetq_lane_u64(vreinterpretq_u64_u8(onekey), 0);
+                    const u128_neon modulo  = vreinterpretq_u8_u32(
+                        vsetq_lane_u32((uint32_t)(dividend % divisor), vdupq_n_u32(0), 0));
+                    acc = veorq_u8(modulo, acc);
+                } else {
+                    u128_neon temp2 = vld1q_u8((uint8_t *)(rounds & 1 ? buftmp : pbuf));
+                    const u128_neon add1 = veorq_u8(rc[0], temp2); rc++;
+                    const uint64x2_t clprod1 = clmul_neon(vreinterpretq_u64_u8(add1),
+                                                           vreinterpretq_u64_u8(add1), 0x10);
+                    onekey = vreinterpretq_u8_u64(clprod1);
+                    const u128_neon clprod2 = mulhrs_epi16_neon(acc, onekey);
+                    acc = veorq_u8(clprod2, acc);
+                }
+            } while (rounds--);
+            const u128_neon tempa3 = vld1q_u8((uint8_t *)prandex);
+            vst1q_u8((uint8_t *)prandex, onekey);
+            vst1q_u8((uint8_t *)prand, veorq_u8(tempa3, acc));
             break;
         }
         case 0x1c: {
-            const u128_neon temp1 = vld1q_u8((uint8_t *)prand);
+            /* Must match x86 v2_2: temp1=pbuf, temp2=prandex, then xor tempa3 into acc */
+            const u128_neon temp1 = vld1q_u8((uint8_t *)pbuf);   /* FIX: was prand */
             const u128_neon temp2 = vld1q_u8((uint8_t *)prandex);
             const u128_neon add1 = veorq_u8(temp1, temp2);
-            const uint64x2_t clprod1 = clmul_neon(vreinterpretq_u64_u8(add1), vreinterpretq_u64_u8(add1), 0x10);
-            const u128_neon clprod2 = vld1q_u8((uint8_t *)pbuf);
+            const uint64x2_t clprod1 = clmul_neon(vreinterpretq_u64_u8(add1),
+                                                   vreinterpretq_u64_u8(add1), 0x10);
             acc = veorq_u8(vreinterpretq_u8_u64(clprod1), acc);
-            acc = veorq_u8(clprod2, acc);
-            const u128_neon tempa1 = mulhrs_epi16_neon(acc, temp1);
-            const u128_neon tempa2 = veorq_u8(tempa1, temp1);
+            const u128_neon tempa1 = mulhrs_epi16_neon(acc, temp2);
+            const u128_neon tempa2 = veorq_u8(tempa1, temp2);
+            const u128_neon tempa3 = vld1q_u8((uint8_t *)prand);
             vst1q_u8((uint8_t *)prand, tempa2);
-            const u128_neon tempb1 = mulhrs_epi16_neon(acc, temp2);
-            const u128_neon tempb2 = veorq_u8(tempb1, temp2);
+            acc = veorq_u8(tempa3, acc);
+            const u128_neon temp4 = pbuf[(selector & 1) ? -1 : 1];
+            acc = veorq_u8(temp4, acc);
+            const u128_neon tempb1 = mulhrs_epi16_neon(acc, tempa3);
+            const u128_neon tempb2 = veorq_u8(tempb1, tempa3);
             vst1q_u8((uint8_t *)prandex, tempb2);
             break;
         }
@@ -280,4 +298,46 @@ uint64_t verusclhashv2_2(void * random, const unsigned char buf[64], uint64_t ke
         (u128_neon *)g_prand, (u128_neon *)g_prandex);
     acc = veorq_u8(acc, lazyLengthHash_neon(1024, 64));
     return precompReduction64_neon(acc);
+}
+
+/*
+ * ARM-compatible aligned memory allocation.
+ * Uses 16-byte alignment (minimum for NEON 128-bit loads/stores).
+ */
+void *alloc_aligned_buffer(uint64_t bufSize)
+{
+    void *answer = NULL;
+    if (posix_memalign(&answer, 16, bufSize) != 0)
+        return NULL;
+    return answer;
+}
+
+/*
+ * Global key and descriptor shared_ptrs.
+ * Allocated once on first construction of verusclhasher.
+ * Two VERUSKEYSIZE regions: [0..VERUSKEYSIZE) is the live key,
+ * [VERUSKEYSIZE..2*VERUSKEYSIZE) is the work area used by GenNewCLKey.
+ */
+std::shared_ptr<void> verusclhasher_key;
+std::shared_ptr<void> verusclhasher_descr;
+
+verusclhasher::verusclhasher() : keyMask(511)
+{
+    if (!verusclhasher_key)
+    {
+        /* Allocate 2 * VERUSKEYSIZE so GenNewCLKey can use the upper half as
+         * a temporary write area before copying back to the lower half. */
+        void *key_buf = alloc_aligned_buffer((uint64_t)VERUSKEYSIZE_NEON * 2);
+        if (key_buf)
+        {
+            memset(key_buf, 0, (size_t)VERUSKEYSIZE_NEON * 2);
+            verusclhasher_key = std::shared_ptr<void>(key_buf, free);
+        }
+    }
+    if (!verusclhasher_descr)
+    {
+        verusclhash_descr *desc = new verusclhash_descr();
+        verusclhasher_descr = std::shared_ptr<void>(desc,
+            [](void *p) { delete static_cast<verusclhash_descr *>(p); });
+    }
 }
